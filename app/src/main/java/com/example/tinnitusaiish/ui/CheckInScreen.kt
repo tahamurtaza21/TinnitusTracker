@@ -2,18 +2,35 @@ package com.example.tinnitusaiish.ui
 
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import com.google.firebase.firestore.FirebaseFirestore
+import com.example.tinnitusaiish.data.CheckInRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 @Composable
@@ -23,41 +40,27 @@ fun CheckInScreen(navController: NavController) {
 
     val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
     val email = prefs.getString("logged_in_email", "") ?: ""
-    val firestore = FirebaseFirestore.getInstance()
+    val repo = CheckInRepository()
 
-    var relaxationDone by remember { mutableStateOf("") }
-    var relaxationDuration by remember { mutableStateOf("") }
-    var soundTherapyDone by remember { mutableStateOf("") }
-    var soundTherapyDuration by remember { mutableStateOf("") }
-    var tinnitusLevel by remember { mutableIntStateOf(5) }
-    var anxietyLevel by remember { mutableIntStateOf(5) }
-
-    var isUpdating by remember { mutableStateOf(false) }
-    var docIdToUpdate by remember { mutableStateOf<String?>(null) }
-
+    var uiState by remember { mutableStateOf(CheckInUiState()) }
     var showRecommendationPopup by remember { mutableStateOf(false) }
     var popupMessage by remember { mutableStateOf("") }
 
+    // Load today's check-in
     LaunchedEffect(email) {
         if (email.isNotEmpty()) {
-            val today = java.text.SimpleDateFormat("yyyy-MM-dd").format(java.util.Date())
-            val snapshot = firestore.collection("checkins")
-                .whereEqualTo("userEmail", email)
-                .whereEqualTo("date", today)
-                .get()
-                .await()
-
-            val doc = snapshot.documents.firstOrNull()
-            if (doc != null) {
-                isUpdating = true
-                docIdToUpdate = doc.id
-
-                relaxationDone = doc.getString("relaxationDone") ?: ""
-                relaxationDuration = doc.getString("relaxationDuration") ?: ""
-                soundTherapyDone = doc.getString("soundTherapyDone") ?: ""
-                soundTherapyDuration = doc.getString("soundTherapyDuration") ?: ""
-                tinnitusLevel = (doc.getLong("tinnitusLevel") ?: 5).toInt()
-                anxietyLevel = (doc.getLong("anxietyLevel") ?: 5).toInt()
+            val (docId, data) = repo.getTodayCheckIn(email)
+            if (data != null) {
+                uiState = uiState.copy(
+                    relaxationDone = data["relaxationDone"] as? String ?: "",
+                    relaxationDuration = data["relaxationDuration"] as? String ?: "",
+                    soundTherapyDone = data["soundTherapyDone"] as? String ?: "",
+                    soundTherapyDuration = data["soundTherapyDuration"] as? String ?: "",
+                    tinnitusLevel = (data["tinnitusLevel"] as? Long)?.toInt() ?: 5,
+                    anxietyLevel = (data["anxietyLevel"] as? Long)?.toInt() ?: 5,
+                    docId = docId,
+                    isUpdating = true
+                )
             }
         }
     }
@@ -65,35 +68,25 @@ fun CheckInScreen(navController: NavController) {
     val submitCheckIn: () -> Unit = {
         if (email.isNotEmpty()) {
             scope.launch {
-                val today = java.text.SimpleDateFormat("yyyy-MM-dd").format(java.util.Date())
-                val checkIns = firestore.collection("checkins")
-
-                val checkInData = hashMapOf(
-                    "userEmail" to email,
-                    "date" to today,
-                    "relaxationDone" to relaxationDone,
-                    "relaxationDuration" to relaxationDuration,
-                    "soundTherapyDone" to soundTherapyDone,
-                    "soundTherapyDuration" to soundTherapyDuration,
-                    "tinnitusLevel" to tinnitusLevel,
-                    "anxietyLevel" to anxietyLevel
+                val data = mapOf(
+                    "relaxationDone" to uiState.relaxationDone,
+                    "relaxationDuration" to uiState.relaxationDuration,
+                    "soundTherapyDone" to uiState.soundTherapyDone,
+                    "soundTherapyDuration" to uiState.soundTherapyDuration,
+                    "tinnitusLevel" to uiState.tinnitusLevel,
+                    "anxietyLevel" to uiState.anxietyLevel
                 )
 
-                if (docIdToUpdate != null) {
-                    checkIns.document(docIdToUpdate!!).set(checkInData).await()
-                } else {
-                    val added = checkIns.add(checkInData).await()
-                    docIdToUpdate = added.id
-                    isUpdating = true
-                }
+                val docId = repo.saveCheckIn(email, uiState.docId, data)
+                uiState = uiState.copy(docId = docId, isUpdating = true)
 
                 withContext(Dispatchers.Main) {
                     val recommendationText = when {
-                        relaxationDone == "No" && soundTherapyDone == "No" ->
+                        uiState.relaxationDone == "No" && uiState.soundTherapyDone == "No" ->
                             "You skipped both relaxation and sound therapy. Would you like to update your check-in?"
-                        relaxationDone == "No" ->
+                        uiState.relaxationDone == "No" ->
                             "You skipped relaxation today. Would you like to update it?"
-                        soundTherapyDone == "No" ->
+                        uiState.soundTherapyDone == "No" ->
                             "You skipped sound therapy today. Want to log it now?"
                         else -> ""
                     }
@@ -115,92 +108,90 @@ fun CheckInScreen(navController: NavController) {
         verticalArrangement = Arrangement.Top
     ) {
         Text("Daily Check-In", style = MaterialTheme.typography.headlineSmall)
-
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text("Have you done your relaxation exercises today?")
-        RadioRow(options = listOf("Yes", "No"), selected = relaxationDone) {
-            relaxationDone = it
-        }
+        CheckInQuestion("Have you done your relaxation exercises today?",
+            options = listOf("Yes", "No"),
+            selected = uiState.relaxationDone,
+            onSelect = { uiState = uiState.copy(relaxationDone = it) })
 
-        Spacer(modifier = Modifier.height(16.dp))
+        CheckInQuestion("How long did you practice the exercises today?",
+            options = listOf("<5 min", "5-10 min", "10-20 min", ">20 min"),
+            selected = uiState.relaxationDuration,
+            onSelect = { uiState = uiState.copy(relaxationDuration = it) })
 
-        Text("How long did you practice the exercises today?")
-        RadioRow(options = listOf("<5 min", "5-10 min", "10-20 min", ">20 min"), selected = relaxationDuration) {
-            relaxationDuration = it
-        }
+        CheckInQuestion("Did you use sound therapy today?",
+            options = listOf("Yes", "No"),
+            selected = uiState.soundTherapyDone,
+            onSelect = { uiState = uiState.copy(soundTherapyDone = it) })
 
-        Spacer(modifier = Modifier.height(16.dp))
+        CheckInQuestion("What was the duration of sound therapy?",
+            options = listOf("<10 min", "10-30 min", "30-60 min", ">1 hour"),
+            selected = uiState.soundTherapyDuration,
+            onSelect = { uiState = uiState.copy(soundTherapyDuration = it) })
 
-        Text("Did you use sound therapy today?")
-        RadioRow(options = listOf("Yes", "No"), selected = soundTherapyDone) {
-            soundTherapyDone = it
-        }
+        LevelSlider("How is your tinnitus today? (1–10)",
+            uiState.tinnitusLevel) { uiState = uiState.copy(tinnitusLevel = it) }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text("What was the duration of sound therapy?")
-        RadioRow(options = listOf("<10 min", "10-30 min", "30-60 min", ">1 hour"), selected = soundTherapyDuration) {
-            soundTherapyDuration = it
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text("How is your tinnitus today? (1–10)")
-        Slider(
-            value = tinnitusLevel.toFloat(),
-            onValueChange = { tinnitusLevel = it.toInt() },
-            valueRange = 1f..10f,
-            steps = 8
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Text("How anxious do you feel today? (1–10)")
-        Slider(
-            value = anxietyLevel.toFloat(),
-            onValueChange = { anxietyLevel = it.toInt() },
-            valueRange = 1f..10f,
-            steps = 8
-        )
+        LevelSlider("How anxious do you feel today? (1–10)",
+            uiState.anxietyLevel) { uiState = uiState.copy(anxietyLevel = it) }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        Button(
-            onClick = submitCheckIn,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (isUpdating) "Update Check-In" else "Submit")
+        Button(onClick = submitCheckIn, modifier = Modifier.fillMaxWidth()) {
+            Text(if (uiState.isUpdating) "Update Check-In" else "Submit")
         }
 
         if (showRecommendationPopup) {
-            AlertDialog(
-                onDismissRequest = { showRecommendationPopup = false },
-                title = { Text("Recommendation") },
-                text = { Text(popupMessage) },
-                confirmButton = {
-                    Button(onClick = {
-                        showRecommendationPopup = false
-                    }) {
-                        Text("Update Check-In")
-                    }
+            RecommendationDialog(
+                message = popupMessage,
+                onDismiss = {
+                    showRecommendationPopup = false
+                    Toast.makeText(context, "Check-in submitted!", Toast.LENGTH_SHORT).show()
+                    navController.popBackStack()
                 },
-                dismissButton = {
-                    Button(onClick = {
-                        showRecommendationPopup = false
-                        Toast.makeText(context, "Check-in submitted!", Toast.LENGTH_SHORT).show()
-                        navController.popBackStack()
-                    }) {
-                        Text("Skip")
-                    }
-                }
+                onUpdate = { showRecommendationPopup = false }
             )
         }
     }
 }
 
 @Composable
-fun RadioRow(options: List<String>, selected: String, onSelect: (String) -> Unit) {
+fun CheckInQuestion(title: String, options: List<String>, selected: String, onSelect: (String) -> Unit) {
+    Spacer(modifier = Modifier.height(16.dp))
+    Text(title)
+    RadioRow(options = options, selected = selected, onSelect = onSelect)
+}
+
+@Composable
+fun LevelSlider(title: String, value: Int, onChange: (Int) -> Unit) {
+    Spacer(modifier = Modifier.height(16.dp))
+    Text(title)
+    Slider(
+        value = value.toFloat(),
+        onValueChange = { onChange(it.toInt()) },
+        valueRange = 1f..10f,
+        steps = 8
+    )
+}
+
+@Composable
+fun RecommendationDialog(message: String, onDismiss: () -> Unit, onUpdate: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Recommendation") },
+        text = { Text(message) },
+        confirmButton = { Button(onClick = onUpdate) { Text("Update Check-In") } },
+        dismissButton = { Button(onClick = onDismiss) { Text("Skip") } }
+    )
+}
+
+@Composable
+fun RadioRow(
+    options: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceEvenly

@@ -1,6 +1,5 @@
 package com.example.tinnitusaiish.ui
 
-import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -15,204 +14,188 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.google.firebase.auth.FirebaseAuth
-import java.time.LocalDate
+import com.example.tinnitusaiish.data.AuthRepository
+import com.example.tinnitusaiish.util.SignUpValidator
+import kotlinx.coroutines.launch
 
-class SignUpScreen {
-    companion object {
-        fun isValidEmail(email: String): Boolean {
-            val emailRegex = "[a-zA-Z0-9._-]+@[a-z]+\\.+[a-z]+".toRegex()
-            return email.matches(emailRegex)
-        }
+data class SignUpUiState(
+    var name: String = "",
+    var email: String = "",
+    var password: String = "",
+    var confirmPassword: String = "",
+    var nameError: Boolean = false,
+    var emailError: Boolean = false,
+    var passwordError: Boolean = false,
+    var confirmPasswordError: Boolean = false
+)
 
-        @Composable
-        fun Screen(
-            onSignUpSuccess: () -> Unit,
-            onNavigateToLogin: () -> Unit
-        ) {
-            val context = LocalContext.current
+@Composable
+fun SignUpScreen(
+    onSignUpSuccess: () -> Unit,
+    onNavigateToLogin: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val repo = AuthRepository()
 
-            var name by remember { mutableStateOf("") }
-            var email by remember { mutableStateOf("") }
-            var password by remember { mutableStateOf("") }
-            var confirmPassword by remember { mutableStateOf("") }
+    var uiState by remember { mutableStateOf(SignUpUiState()) }
 
-            var nameError by remember { mutableStateOf(false) }
-            var emailError by remember { mutableStateOf(false) }
-            var passwordError by remember { mutableStateOf(false) }
-            var confirmPasswordError by remember { mutableStateOf(false) }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = "Create Account",
+            style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.padding(bottom = 32.dp)
+        )
 
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = "Create Account",
-                    style = MaterialTheme.typography.headlineMedium,
-                    modifier = Modifier.padding(bottom = 32.dp)
+        InputField(
+            value = uiState.name,
+            onValueChange = {
+                uiState = uiState.copy(name = it, nameError = it.isEmpty())
+            },
+            label = "Full Name",
+            error = uiState.nameError,
+            errorMessage = "Name is required",
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
+        )
+
+        InputField(
+            value = uiState.email,
+            onValueChange = {
+                uiState = uiState.copy(
+                    email = it,
+                    emailError = !SignUpValidator.isValidEmail(it)
                 )
+            },
+            label = "Email Address",
+            error = uiState.emailError && uiState.email.isNotEmpty(),
+            errorMessage = "Please enter a valid email address",
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Email,
+                imeAction = ImeAction.Next
+            )
+        )
 
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = {
-                        name = it
-                        nameError = it.isEmpty()
-                    },
-                    label = { Text("Full Name") },
-                    isError = nameError,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next)
+        InputField(
+            value = uiState.password,
+            onValueChange = {
+                uiState = uiState.copy(
+                    password = it,
+                    passwordError = !SignUpValidator.isValidPassword(it)
                 )
-                if (nameError) {
-                    Text(
-                        text = "Name is required",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, bottom = 8.dp)
-                    )
-                }
+            },
+            label = "Password",
+            error = uiState.passwordError && uiState.password.isNotEmpty(),
+            errorMessage = "Password must be at least 6 characters",
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Next
+            )
+        )
 
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = {
-                        email = it
-                        emailError = !isValidEmail(it)
-                    },
-                    label = { Text("Email Address") },
-                    isError = emailError,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Email,
-                        imeAction = ImeAction.Next
-                    )
-                )
-                if (emailError && email.isNotEmpty()) {
-                    Text(
-                        text = "Please enter a valid email address",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, bottom = 8.dp)
-                    )
-                }
-
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = {
-                        password = it
-                        passwordError = it.length < 6
-                    },
-                    label = { Text("Password") },
-                    isError = passwordError,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Password,
-                        imeAction = ImeAction.Next
+        InputField(
+            value = uiState.confirmPassword,
+            onValueChange = {
+                uiState = uiState.copy(
+                    confirmPassword = it,
+                    confirmPasswordError = !SignUpValidator.doPasswordsMatch(
+                        uiState.password,
+                        it
                     )
                 )
-                if (passwordError && password.isNotEmpty()) {
-                    Text(
-                        text = "Password must be at least 6 characters",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, bottom = 8.dp)
-                    )
-                }
+            },
+            label = "Confirm Password",
+            error = uiState.confirmPasswordError && uiState.confirmPassword.isNotEmpty(),
+            errorMessage = "Passwords do not match",
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done
+            )
+        )
 
-                OutlinedTextField(
-                    value = confirmPassword,
-                    onValueChange = {
-                        confirmPassword = it
-                        confirmPasswordError = it != password
-                    },
-                    label = { Text("Confirm Password") },
-                    isError = confirmPasswordError,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 24.dp),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Password,
-                        imeAction = ImeAction.Done
+        Button(
+            onClick = {
+                uiState = uiState.copy(
+                    nameError = uiState.name.isEmpty(),
+                    emailError = !SignUpValidator.isValidEmail(uiState.email),
+                    passwordError = !SignUpValidator.isValidPassword(uiState.password),
+                    confirmPasswordError = !SignUpValidator.doPasswordsMatch(
+                        uiState.password,
+                        uiState.confirmPassword
                     )
                 )
-                if (confirmPasswordError && confirmPassword.isNotEmpty()) {
-                    Text(
-                        text = "Passwords do not match",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, bottom = 8.dp)
-                    )
-                }
 
-                Button(
-                    onClick = {
-                        nameError = name.isEmpty()
-                        emailError = !isValidEmail(email)
-                        passwordError = password.length < 6
-                        confirmPasswordError = confirmPassword != password
-
-                        if (!nameError && !emailError && !passwordError && !confirmPasswordError) {
-                            val auth = FirebaseAuth.getInstance()
-
-                            auth.createUserWithEmailAndPassword(email, password)
-                                .addOnCompleteListener { task ->
-                                    if (task.isSuccessful) {
-                                        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-                                        prefs.edit()
-                                            .putString("logged_in_email", email)
-                                            .putString("signup_date", java.text.SimpleDateFormat("yyyy-MM-dd").format(java.util.Date()))
-                                            .apply()
-
-                                        Toast.makeText(context, "Account created successfully!", Toast.LENGTH_LONG).show()
-                                        onSignUpSuccess()
-                                    } else {
-                                        Toast.makeText(context, "Sign up failed: ${task.exception?.message}", Toast.LENGTH_LONG).show()
-                                    }
-                                }
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
+                if (!uiState.nameError && !uiState.emailError &&
+                    !uiState.passwordError && !uiState.confirmPasswordError
                 ) {
-                    Text("SIGN UP")
-                }
-
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Don't have an account? ")
-                        TextButton(onClick = onNavigateToLogin) {
-                            Text("Sign In")
+                    scope.launch {
+                        val result = repo.signUpUser(context, uiState.email, uiState.password)
+                        result.onSuccess {
+                            Toast.makeText(context, "Account created successfully!", Toast.LENGTH_LONG).show()
+                            onSignUpSuccess()
+                        }.onFailure { e ->
+                            Toast.makeText(context, "Sign up failed: ${e.message}", Toast.LENGTH_LONG).show()
                         }
                     }
                 }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+        ) {
+            Text("SIGN UP")
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 16.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Already have an account? ")
+            TextButton(onClick = onNavigateToLogin) {
+                Text("Sign In")
             }
+        }
+    }
+}
+
+@Composable
+fun InputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    error: Boolean,
+    errorMessage: String,
+    keyboardOptions: KeyboardOptions,
+    visualTransformation: androidx.compose.ui.text.input.VisualTransformation? = null
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(label) },
+            isError = error,
+            modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = keyboardOptions,
+            visualTransformation = visualTransformation ?: androidx.compose.ui.text.input.VisualTransformation.None
+        )
+        if (error) {
+            Text(
+                text = errorMessage,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(start = 16.dp, top = 4.dp)
+            )
         }
     }
 }

@@ -12,8 +12,6 @@ import com.example.tinnitusaiish.ui.HomeScreen
 import com.example.tinnitusaiish.ui.LoginScreen
 import com.example.tinnitusaiish.ui.ReportScreen
 import com.example.tinnitusaiish.ui.SignUpScreen
-import com.example.tinnitusaiish.util.deleteAllCheckIns
-import com.example.tinnitusaiish.util.insertFakeCheckInData
 import com.google.firebase.auth.FirebaseAuth
 
 class MainActivity : ComponentActivity() {
@@ -28,9 +26,9 @@ class MainActivity : ComponentActivity() {
 
             // added dummy data
 
-            val email = "tahamurtaza15@gmail.com"
-            deleteAllCheckIns(this, email)
-            insertFakeCheckInData(this, email)
+//            val email = "tahamurtaza15@gmail.com"
+//            deleteAllCheckIns(this, email)
+//            insertFakeCheckInData(this, email)
 
             val navController = rememberNavController()
 
@@ -46,20 +44,23 @@ class MainActivity : ComponentActivity() {
                 startDestination = if (isLoggedIn) "home" else "login"
             ) {
                 composable("login") {
-                    LoginScreen.Screen(
+                    LoginScreen(
                         onLoginSuccess = { navController.navigate("home") },
                         onNavigateToSignUp = { navController.navigate("signup") }
                     )
                 }
+
                 composable("signup") {
-                    SignUpScreen.Screen(
+                    SignUpScreen(
                         onSignUpSuccess = { navController.navigate("login") },
                         onNavigateToLogin = { navController.navigate("login") }
                     )
                 }
+
                 composable("home") {
                     HomeScreen(navController = navController)
                 }
+
                 composable("checkin") {
                     CheckInScreen(navController = navController)
                 }
