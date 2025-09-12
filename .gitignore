@@ -1,53 +1,23 @@
-# ===== ANDROID BUILD FILES =====
 .gradle/
 local.properties
 *.iml
 .idea/
 build/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Log/OS Files
+*.log
+
+# Android Studio generated files and folders
 captures/
 .externalNativeBuild/
 .cxx/
+*.aab
 *.apk
-*.aar
-*.dex
-*.class
-*.jar
 
-# ===== ANDROID STUDIO =====
-*.log
-*.hprof
-*.orig
-.DS_Store
-/.settings/
-/out/
-/gen/
-/bin/
 
-# ===== FIREBASE / GOOGLE SERVICES =====
-# Keep google-services.json (safe, required for build)
-# Ignore downloaded service account keys
-*serviceAccountKey*.json
-firebase-debug.log
-
-# ===== ENV / SECRETS =====
-.env
-*.keystore
 *.jks
-*.pem
-*.key
 
-# ===== GRADLE WRAPPER =====
-/gradle/wrapper/gradle-wrapper.properties
-/gradle/wrapper/gradle-wrapper.jar
 
-# ===== TEST / COVERAGE =====
-/test-results/
-/coverage/
-/jacoco/
-/reports/
-
-# ===== MISC =====
-/tmp/
-/node_modules/
-/npm-debug.log
-yarn-error.log
