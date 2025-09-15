@@ -1,4 +1,4 @@
-package com.example.tinnitusaiish.ui
+package com.example.tinnitusaiish.ui.user
 
 import android.content.Context
 import android.widget.Toast

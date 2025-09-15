@@ -1,4 +1,4 @@
-package com.example.tinnitusaiish.ui
+package com.example.tinnitusaiish.ui.auth
 
 data class LoginUiState(
     var email: String = "",

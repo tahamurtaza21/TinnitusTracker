@@ -1,4 +1,4 @@
-package com.example.tinnitusaiish.ui
+package com.example.tinnitusaiish.ui.user
 
 import android.content.Context
 import androidx.compose.foundation.layout.Arrangement

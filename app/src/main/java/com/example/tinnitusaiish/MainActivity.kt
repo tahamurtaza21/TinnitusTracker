@@ -7,11 +7,13 @@ import androidx.activity.enableEdgeToEdge
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.tinnitusaiish.ui.CheckInScreen
-import com.example.tinnitusaiish.ui.HomeScreen
-import com.example.tinnitusaiish.ui.LoginScreen
-import com.example.tinnitusaiish.ui.ReportScreen
-import com.example.tinnitusaiish.ui.SignUpScreen
+import com.example.tinnitusaiish.ui.admin.AdminDashboardScreen
+import com.example.tinnitusaiish.ui.admin.AdminUserReportsScreen
+import com.example.tinnitusaiish.ui.auth.LoginScreen
+import com.example.tinnitusaiish.ui.auth.SignUpScreen
+import com.example.tinnitusaiish.ui.user.CheckInScreen
+import com.example.tinnitusaiish.ui.user.HomeScreen
+import com.example.tinnitusaiish.ui.user.ReportScreen
 import com.google.firebase.auth.FirebaseAuth
 
 class MainActivity : ComponentActivity() {
@@ -46,6 +48,7 @@ class MainActivity : ComponentActivity() {
                 composable("login") {
                     LoginScreen(
                         onLoginSuccess = { navController.navigate("home") },
+                        onAdminLoginSuccess = { navController.navigate("admin_dashboard") },
                         onNavigateToSignUp = { navController.navigate("signup") }
                     )
                 }
@@ -67,6 +70,14 @@ class MainActivity : ComponentActivity() {
                 composable("report") {
                     ReportScreen(navController = navController)
                 }
+                composable("admin_dashboard") {
+                    AdminDashboardScreen(navController = navController)
+                }
+                composable("admin_user_reports/{uid}") { backStackEntry ->
+                    val uid = backStackEntry.arguments?.getString("uid") ?: ""
+                    AdminUserReportsScreen(uid = uid)
+                }
+
             }
         }
     }

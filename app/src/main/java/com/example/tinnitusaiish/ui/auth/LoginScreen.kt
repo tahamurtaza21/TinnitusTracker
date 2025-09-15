@@ -1,4 +1,4 @@
-package com.example.tinnitusaiish.ui
+package com.example.tinnitusaiish.ui.auth
 
 import android.app.Activity
 import android.content.pm.PackageManager
@@ -125,7 +125,7 @@ fun LoginScreen(
                 if (!uiState.emailError && !uiState.passwordError) {
                     scope.launch {
                         val result = repo.loginUser(context, uiState.email, uiState.password)
-                        result.onSuccess {
+                        result.onSuccess { (email, role) ->
                             Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
 
                             // Notification permissions (API 33+)
@@ -143,12 +143,17 @@ fun LoginScreen(
                                 }
                             }
 
+                            // Daily reminder setup
                             scheduleDailyCheckInReminder(context)
-
                             val nowWork = OneTimeWorkRequestBuilder<CheckInReminderWorker>().build()
                             WorkManager.getInstance(context).enqueue(nowWork)
 
-                            onLoginSuccess()
+                            // 🚨 Role-based navigation
+                            if (role == "admin") {
+                                onAdminLoginSuccess()
+                            } else {
+                                onLoginSuccess()
+                            }
                         }.onFailure { e ->
                             uiState = uiState.copy(loginError = "Login failed: ${e.message}")
                         }

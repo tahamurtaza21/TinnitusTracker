@@ -1,4 +1,4 @@
-package com.example.tinnitusaiish.ui
+package com.example.tinnitusaiish.ui.user
 
 data class CheckInUiState(
     var relaxationDone: String = "",

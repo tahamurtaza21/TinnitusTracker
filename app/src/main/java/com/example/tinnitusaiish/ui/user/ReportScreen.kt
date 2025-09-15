@@ -1,4 +1,4 @@
-package com.example.tinnitusaiish.ui
+package com.example.tinnitusaiish.ui.user
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image

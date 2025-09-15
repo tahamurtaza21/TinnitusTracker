@@ -1,4 +1,4 @@
-package com.example.tinnitusaiish.ui
+package com.example.tinnitusaiish.ui.auth
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.*
