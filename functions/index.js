@@ -2,7 +2,7 @@ const functions = require("firebase-functions");
 const nodemailer = require("nodemailer");
 
 const gmailEmail = "tahamurtaza15@gmail.com";
-const gmailAppPassword = "alugsfyqxkbwpbcz";
+const gmailAppPassword = "rhmakaykfpjpskco";
 
 const transporter = nodemailer.createTransport({
   service: "gmail",

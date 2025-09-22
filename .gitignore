@@ -28,6 +28,7 @@ captures/
 # Ignore downloaded service account keys
 *serviceAccountKey*.json
 firebase-debug.log
+functions/index.js
 
 # ===== ENV / SECRETS =====
 .env

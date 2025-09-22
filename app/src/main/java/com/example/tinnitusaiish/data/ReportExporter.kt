@@ -5,6 +5,7 @@ import com.example.tinnitusaiish.captureLineChartAsBitmap
 import com.example.tinnitusaiish.createLineChart
 import com.example.tinnitusaiish.model.WeeklyReport
 import com.example.tinnitusaiish.util.generatePdf
+import com.example.tinnitusaiish.util.sendPdfViaEmail
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.storage.FirebaseStorage
@@ -25,7 +26,8 @@ class ReportExporter(
         anxietyData: List<Int?>,
         patientName: String,
         userNote: String,
-        doctorEmail: String
+        doctorEmail: String,
+        reportRange: String // 👈 new
     ): Result<String> {
         return try {
             // 1️⃣ Generate charts
@@ -38,7 +40,8 @@ class ReportExporter(
                 patientName = patientName,
                 userNote = userNote,
                 tinnitusGraph = captureLineChartAsBitmap(tinnitusChart),
-                anxietyGraph = captureLineChartAsBitmap(anxietyChart)
+                anxietyGraph = captureLineChartAsBitmap(anxietyChart),
+                reportRange = reportRange // 👈 pass through
             )
 
             if (!file.exists()) {
@@ -62,6 +65,9 @@ class ReportExporter(
             )
 
             functions.getHttpsCallable("sendDoctorReport").call(data).await()
+
+            // 4️⃣ Optionally also open/send locally
+            sendPdfViaEmail(context, file, doctorEmail, reportRange)
 
             Result.success("Report sent successfully to $doctorEmail")
         } catch (e: Exception) {

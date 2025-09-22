@@ -317,7 +317,8 @@ fun ReportExportButton(
                             anxietyData = anxietyData,
                             patientName = patientName,
                             userNote = userNote,
-                            doctorEmail = "tahamurtaza21@outlook.com"
+                            doctorEmail = "tahamurtaza21@outlook.com",
+                            reportRange = reportRange   // 👈 added
                         )
 
                         result.fold(
@@ -336,3 +337,4 @@ fun ReportExportButton(
         Text("Send to Doctor")
     }
 }
+

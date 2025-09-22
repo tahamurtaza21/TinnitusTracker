@@ -1,6 +1,7 @@
 package com.example.tinnitusaiish.ui.auth
 
 import android.app.Activity
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
@@ -128,6 +129,13 @@ fun LoginScreen(
                         result.onSuccess { (email, role) ->
                             Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
 
+                            // Save user role + email in SharedPreferences
+                            val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                            prefs.edit()
+                                .putString("logged_in_email", email)
+                                .putString("logged_in_role", role)
+                                .apply()
+
                             // Notification permissions (API 33+)
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                 if (ContextCompat.checkSelfPermission(
@@ -143,12 +151,14 @@ fun LoginScreen(
                                 }
                             }
 
-                            // Daily reminder setup
-                            scheduleDailyCheckInReminder(context)
-                            val nowWork = OneTimeWorkRequestBuilder<CheckInReminderWorker>().build()
-                            WorkManager.getInstance(context).enqueue(nowWork)
+                            // Daily reminder setup only for non-admins
+                            if (role != "admin") {
+                                scheduleDailyCheckInReminder(context)
+                                val nowWork = OneTimeWorkRequestBuilder<CheckInReminderWorker>().build()
+                                WorkManager.getInstance(context).enqueue(nowWork)
+                            }
 
-                            // 🚨 Role-based navigation
+                            // Navigate based on role
                             if (role == "admin") {
                                 onAdminLoginSuccess()
                             } else {
