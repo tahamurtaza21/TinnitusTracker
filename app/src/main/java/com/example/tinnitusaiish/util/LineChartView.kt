@@ -22,25 +22,25 @@ fun createLineChart(
     context: Context,
     label: String,
     values: List<Int?>,
-    rangeType: String,                    // "weekly" | "monthly" | "since_signup"
-    startDateIso: String? = null,         // inclusive
-    endDateIso: String? = null            // inclusive
+    rangeType: String,
+    startDateIso: String? = null,
+    endDateIso: String? = null
 ): LineChart {
     val chart = LineChart(context)
     val lineData = LineData()
 
-    // build contiguous segments for non-null values
+    // ---- build contiguous segments for non-null values ----
     var current = mutableListOf<Entry>()
     values.forEachIndexed { i, v ->
         if (v != null) current.add(Entry(i.toFloat(), v.toFloat()))
         else if (current.isNotEmpty()) {
-            lineData.addDataSet(styledSet(current, label))
+            lineData.addDataSet(styledSet(current, "")) // no legend
             current = mutableListOf()
         }
     }
-    if (current.isNotEmpty()) lineData.addDataSet(styledSet(current, label))
+    if (current.isNotEmpty()) lineData.addDataSet(styledSet(current, ""))
 
-    // optional ghost markers for missing days
+    // ---- optional ghost markers for missing days ----
     values.forEachIndexed { i, v ->
         if (v == null) {
             val ghost = LineDataSet(listOf(Entry(i.toFloat(), 0f)), "").apply {
@@ -50,6 +50,8 @@ fun createLineChart(
                 circleRadius = 5f
                 setDrawValues(false)
                 setDrawHighlightIndicators(false)
+                formLineWidth = 0f
+                formSize = 0f
             }
             lineData.addDataSet(ghost)
         }
@@ -68,7 +70,11 @@ fun createLineChart(
 
     // ---- build label range deterministically ----
     val (startIso, endIso) = computeRange(rangeType, startDateIso, endDateIso)
-    val (labels, expectedCount) = buildDateLabels(startIso, endIso)
+    val (labels, expectedCount) = buildDateLabels(
+        startIso,
+        endIso,
+        weekly = (rangeType == "since_signup")
+    )
 
     chart.xAxis.apply {
         position = XAxis.XAxisPosition.BOTTOM
@@ -89,6 +95,7 @@ fun createLineChart(
         }
     }
 
+    chart.legend.isEnabled = false
     chart.setTouchEnabled(false)
 
     // fixed size for bitmap export
@@ -139,7 +146,7 @@ private fun computeRange(
             (startOverride ?: DF_ISO.format(cStart.time)) to (endOverride ?: DF_ISO.format(cEnd.time))
         }
         "since_signup" -> {
-            val startIso = startOverride ?: DF_ISO.format(today.time) // fallback (overridden by caller)
+            val startIso = startOverride ?: DF_ISO.format(today.time)
             startIso to (endOverride ?: DF_ISO.format(today.time))
         }
         else -> {
@@ -149,7 +156,11 @@ private fun computeRange(
     }
 }
 
-private fun buildDateLabels(startIso: String, endIso: String): Pair<List<String>, Int> {
+private fun buildDateLabels(
+    startIso: String,
+    endIso: String,
+    weekly: Boolean = false
+): Pair<List<String>, Int> {
     val start = Calendar.getInstance().apply { time = DF_ISO.parse(startIso)!! }
     val end = Calendar.getInstance().apply { time = DF_ISO.parse(endIso)!! }
 
@@ -157,7 +168,11 @@ private fun buildDateLabels(startIso: String, endIso: String): Pair<List<String>
     val c = start.clone() as Calendar
     while (!c.after(end)) {
         labels.add(DF_LABEL.format(c.time))
-        c.add(Calendar.DAY_OF_YEAR, 1)
+        if (weekly) {
+            c.add(Calendar.WEEK_OF_YEAR, 1)
+        } else {
+            c.add(Calendar.DAY_OF_YEAR, 1)
+        }
     }
     return labels to labels.size
 }

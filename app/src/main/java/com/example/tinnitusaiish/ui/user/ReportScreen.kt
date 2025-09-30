@@ -104,18 +104,37 @@ fun ReportScreen(navController: NavController) {
 
                 val df = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
                 val byDate = sorted.associateBy { it.date }
-                val tSeries = mutableListOf<Int?>()
-                val aSeries = mutableListOf<Int?>()
+                val tSeries: List<Int?>
+                val aSeries: List<Int?>
 
-                val c = Calendar.getInstance().apply { time = df.parse(startIso)!! }
-                val end = Calendar.getInstance().apply { time = df.parse(endIso)!! }
-                while (!c.after(end)) {
-                    val d = df.format(c.time)
-                    val ci = byDate[d]
-                    tSeries.add(ci?.tinnitusLevel)
-                    aSeries.add(ci?.anxietyLevel)
-                    c.add(Calendar.DAY_OF_YEAR, 1)
+                if (reportRange == "since_signup") {
+                    // group by ISO week and take averages
+                    val grouped = sorted.groupBy { ci ->
+                        val cal = Calendar.getInstance().apply { time = df.parse(ci.date)!! }
+                        "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.WEEK_OF_YEAR)}"
+                    }
+                    tSeries = grouped.values.map { week ->
+                        week.mapNotNull { it.tinnitusLevel }.average().takeIf { !it.isNaN() }?.toInt()
+                    }
+                    aSeries = grouped.values.map { week ->
+                        week.mapNotNull { it.anxietyLevel }.average().takeIf { !it.isNaN() }?.toInt()
+                    }
+                } else {
+                    val tmpT = mutableListOf<Int?>()
+                    val tmpA = mutableListOf<Int?>()
+                    val c = Calendar.getInstance().apply { time = df.parse(startIso)!! }
+                    val end = Calendar.getInstance().apply { time = df.parse(endIso)!! }
+                    while (!c.after(end)) {
+                        val d = df.format(c.time)
+                        val ci = byDate[d]
+                        tmpT.add(ci?.tinnitusLevel)
+                        tmpA.add(ci?.anxietyLevel)
+                        c.add(Calendar.DAY_OF_YEAR, 1)
+                    }
+                    tSeries = tmpT
+                    aSeries = tmpA
                 }
+
 
                 val tChart = createLineChart(
                     context,
@@ -251,7 +270,12 @@ fun ReportContent(
     ReportRangeLabel(reportRange, endDate)
     ReportCharts(tinnitusBitmap, anxietyBitmap)
 
-    val weeks = if (reportRange == "since_signup") weeklySummaries.size else 1
+    val weeks = when (reportRange) {
+        "since_signup" -> weeklySummaries.size
+        "monthly" -> 4
+        else -> 1
+    }
+
     ReportSection("Total Weeks", weeks.toString())
     ReportSection("Overall Avg Tinnitus", String.format("%.2f", report.averageTinnitus))
     ReportSection("Overall Avg Anxiety", String.format("%.2f", report.averageAnxiety))
