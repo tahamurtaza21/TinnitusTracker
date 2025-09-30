@@ -1,7 +1,6 @@
 package com.example.tinnitusaiish.data
 
 import android.content.Context
-import com.example.tinnitusaiish.captureLineChartAsBitmap
 import com.example.tinnitusaiish.createLineChart
 import com.example.tinnitusaiish.model.WeeklyReport
 import com.example.tinnitusaiish.util.generatePdf
@@ -27,29 +26,40 @@ class ReportExporter(
         patientName: String,
         userNote: String,
         doctorEmail: String,
-        reportRange: String // 👈 new
+        reportRange: String // 👈 weekly / monthly / since_signup
     ): Result<String> {
         return try {
-            // 1️⃣ Generate charts
-            val tinnitusChart = createLineChart(context, "Tinnitus Trend", tinnitusData)
-            val anxietyChart = createLineChart(context, "Anxiety Trend", anxietyData)
+            // 1️⃣ Generate charts with proper range type
+            val tinnitusChart = createLineChart(
+                context,
+                label = "Tinnitus Trend",
+                values = tinnitusData,
+                rangeType = reportRange
+            )
+            val anxietyChart = createLineChart(
+                context,
+                label = "Anxiety Trend",
+                values = anxietyData,
+                rangeType = reportRange
+            )
 
+            // ✅ Pass correctly named parameters
             val file: File = generatePdf(
                 context = context,
                 report = report,
                 patientName = patientName,
                 userNote = userNote,
-                tinnitusGraph = captureLineChartAsBitmap(tinnitusChart),
-                anxietyGraph = captureLineChartAsBitmap(anxietyChart),
-                reportRange = reportRange // 👈 pass through
+                reportRange = reportRange
             )
+
 
             if (!file.exists()) {
                 return Result.failure(Exception("PDF file not created"))
             }
 
             // 2️⃣ Upload to Firebase Storage
-            val userId = auth.currentUser?.uid ?: return Result.failure(Exception("No logged-in user"))
+            val userId = auth.currentUser?.uid
+                ?: return Result.failure(Exception("No logged-in user"))
             val storageRef = storage.reference.child("reports/$userId/${file.name}")
 
             FileInputStream(file).use { stream ->

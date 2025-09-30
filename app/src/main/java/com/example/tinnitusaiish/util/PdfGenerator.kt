@@ -6,6 +6,8 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Environment
 import androidx.core.content.FileProvider
+import com.example.tinnitusaiish.captureLineChartAsBitmap
+import com.example.tinnitusaiish.createLineChart
 import com.example.tinnitusaiish.model.WeeklyReport
 import com.example.tinnitusaiish.model.getStartDate
 import com.itextpdf.io.image.ImageDataFactory
@@ -41,9 +43,7 @@ fun generatePdf(
     report: WeeklyReport,
     patientName: String,
     userNote: String,
-    tinnitusGraph: Bitmap,
-    anxietyGraph: Bitmap,
-    reportRange: String // 👈 new param
+    reportRange: String // 👈 weekly / monthly / since_signup
 ): File {
     val reportLabel = when (reportRange) {
         "weekly" -> "Weekly"
@@ -102,7 +102,14 @@ fun generatePdf(
     addSection("Relaxation Exercises Done", relaxStr)
     addSection("Sound Therapy Used", soundStr)
 
-    // Insert Graph Images
+    // ✅ Insert Graph Images with proper rangeType
+    val tinnitusChart = createLineChart(
+        context,
+        label = "Tinnitus",
+        values = report.tinnitusLevels,
+        rangeType = reportRange
+    )
+    val tinnitusGraph: Bitmap = captureLineChartAsBitmap(tinnitusChart)
     val tinnitusStream = ByteArrayOutputStream()
     tinnitusGraph.compress(Bitmap.CompressFormat.PNG, 100, tinnitusStream)
     val tinnitusImage = Image(ImageDataFactory.create(tinnitusStream.toByteArray()))
@@ -117,6 +124,13 @@ fun generatePdf(
             .setMarginBottom(10f)
     )
 
+    val anxietyChart = createLineChart(
+        context,
+        label = "Anxiety",
+        values = report.anxietyLevels,
+        rangeType = reportRange
+    )
+    val anxietyGraph: Bitmap = captureLineChartAsBitmap(anxietyChart)
     val anxietyStream = ByteArrayOutputStream()
     anxietyGraph.compress(Bitmap.CompressFormat.PNG, 100, anxietyStream)
     val anxietyImage = Image(ImageDataFactory.create(anxietyStream.toByteArray()))
@@ -156,7 +170,7 @@ fun sendPdfViaEmail(
     context: Context,
     file: File,
     toEmail: String,
-    reportRange: String // 👈 added
+    reportRange: String
 ) {
     val label = when (reportRange) {
         "weekly" -> "Weekly"

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
@@ -63,6 +64,10 @@ fun ReportScreen(navController: NavController) {
     var userNote by remember { mutableStateOf("") }
     val patientName = prefs.getString("logged_in_name", "Test User") ?: "Test User"
 
+    // 🔄 New states for suggestion popup (popup 3 & 4)
+    var showSuggestionPopup by remember { mutableStateOf(false) }
+    var suggestionMessage by remember { mutableStateOf("") }
+
     // 🔄 Load report when range changes
     LaunchedEffect(reportRange) {
         scope.launch {
@@ -91,8 +96,8 @@ fun ReportScreen(navController: NavController) {
                     weeklySummaries.map { it.averageAnxiety.toInt() }
                 else report?.anxietyLevels ?: emptyList()
 
-                val tinnitusChart = createLineChart(context, "Tinnitus Trend", tinnitusData)
-                val anxietyChart = createLineChart(context, "Anxiety Trend", anxietyData)
+                val tinnitusChart = createLineChart(context, "Tinnitus Trend", tinnitusData, reportRange)
+                val anxietyChart = createLineChart(context, "Anxiety Trend", anxietyData, reportRange)
 
                 tinnitusBitmap = captureLineChartAsBitmap(tinnitusChart)
                 anxietyBitmap = captureLineChartAsBitmap(anxietyChart)
@@ -145,8 +150,42 @@ fun ReportScreen(navController: NavController) {
             weeklySummaries = weeklySummaries,
             patientName = patientName,
             userNote = userNote,
-            onStatus = { statusMessage = it },
+            onStatus = { msg ->
+                statusMessage = msg
+                if (msg.startsWith("✅")) {
+                    // After successful send → check averages for popup 3 & 4
+                    report?.let { r ->
+                        if (reportRange == "weekly") {
+                            val avgScore = (r.averageTinnitus + r.averageAnxiety) / 2.0
+                            when {
+                                avgScore >= 7 -> {
+                                    suggestionMessage =
+                                        "Your average weekly scores are high. Contact your audiologist for expert advice."
+                                    showSuggestionPopup = true
+                                }
+                                avgScore <= 5 -> {
+                                    suggestionMessage =
+                                        "You're making progress. Continue practicing."
+                                    showSuggestionPopup = true
+                                }
+                            }
+                        }
+                    }
+                }
+            },
             onLoading = { isLoading = it }
+        )
+    }
+
+    // Popup 3 & 4
+    if (showSuggestionPopup) {
+        AlertDialog(
+            onDismissRequest = { showSuggestionPopup = false },
+            title = { Text("Technique Suggestion") },
+            text = { Text(suggestionMessage) },
+            confirmButton = {
+                Button(onClick = { showSuggestionPopup = false }) { Text("OK") }
+            }
         )
     }
 }
@@ -318,7 +357,7 @@ fun ReportExportButton(
                             patientName = patientName,
                             userNote = userNote,
                             doctorEmail = "tahamurtaza21@outlook.com",
-                            reportRange = reportRange   // 👈 added
+                            reportRange = reportRange
                         )
 
                         result.fold(
@@ -337,4 +376,3 @@ fun ReportExportButton(
         Text("Send to Doctor")
     }
 }
-

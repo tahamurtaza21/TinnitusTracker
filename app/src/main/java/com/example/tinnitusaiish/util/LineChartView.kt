@@ -14,7 +14,12 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-fun createLineChart(context: Context, label: String, values: List<Int?>): LineChart {
+fun createLineChart(
+    context: Context,
+    label: String,
+    values: List<Int?>,
+    rangeType: String // 👈 new param
+): LineChart {
     val chart = LineChart(context)
     val lineData = LineData()
 
@@ -32,12 +37,12 @@ fun createLineChart(context: Context, label: String, values: List<Int?>): LineCh
         }
     }
 
-    // ✅ Add ghost points for missing days
+    // Ghost points
     values.forEachIndexed { index, value ->
         if (value == null) {
             val ghostEntry = Entry(index.toFloat(), 0f)
             val ghostSet = LineDataSet(listOf(ghostEntry), "").apply {
-                color = Color.TRANSPARENT // no line
+                color = Color.TRANSPARENT
                 setDrawCircles(true)
                 setCircleColor(Color.GRAY)
                 circleRadius = 5f
@@ -48,7 +53,6 @@ fun createLineChart(context: Context, label: String, values: List<Int?>): LineCh
         }
     }
 
-    // Add the last remaining segment
     if (currentSegment.isNotEmpty()) {
         val segmentSet = createStyledDataSet(currentSegment, label)
         lineData.addDataSet(segmentSet)
@@ -63,21 +67,49 @@ fun createLineChart(context: Context, label: String, values: List<Int?>): LineCh
     chart.axisLeft.granularity = 1f
     chart.axisLeft.axisMinimum = 0f
 
-    // Format Y-axis as integer
     chart.axisLeft.valueFormatter = object : ValueFormatter() {
-        override fun getFormattedValue(value: Float): String {
-            return value.toInt().toString()
-        }
+        override fun getFormattedValue(value: Float): String = value.toInt().toString()
     }
 
+    // ✅ Fix date labels depending on rangeType
+    // inside createLineChart(...)
     val formatter = SimpleDateFormat("MMM dd", Locale.getDefault())
     val calendar = Calendar.getInstance()
-    calendar.add(Calendar.DAY_OF_YEAR, -(values.size - 1))
-    val dateLabels = List(values.size) {
-        val formatted = formatter.format(calendar.time)
-        calendar.add(Calendar.DAY_OF_YEAR, 1)
-        formatted
+
+    val dateLabels: List<String> = when (rangeType) {
+        "weekly" -> {
+            // last N days up to today
+            calendar.add(Calendar.DAY_OF_YEAR, -(values.size - 1))
+            List(values.size) {
+                val formatted = formatter.format(calendar.time)
+                calendar.add(Calendar.DAY_OF_YEAR, 1)
+                formatted
+            }
+        }
+        "monthly" -> {
+            // start from 1st day of current month → today
+            calendar.set(Calendar.DAY_OF_MONTH, 1)
+            List(values.size) {
+                val formatted = formatter.format(calendar.time)
+                calendar.add(Calendar.DAY_OF_YEAR, 1)
+                formatted
+            }
+        }
+        "since_signup" -> {
+            // use actual signup date
+            val startDate = com.example.tinnitusaiish.model.getStartDate()
+            val startCal = Calendar.getInstance().apply {
+                time = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(startDate)!!
+            }
+            List(values.size) {
+                val formatted = formatter.format(startCal.time)
+                startCal.add(Calendar.DAY_OF_YEAR, 1)
+                formatted
+            }
+        }
+        else -> emptyList()
     }
+
 
     chart.xAxis.apply {
         position = XAxis.XAxisPosition.BOTTOM
@@ -108,6 +140,7 @@ fun createLineChart(context: Context, label: String, values: List<Int?>): LineCh
 
     return chart
 }
+
 
 private fun createStyledDataSet(entries: List<Entry>, label: String): LineDataSet {
     return LineDataSet(entries, label).apply {
