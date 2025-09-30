@@ -13,35 +13,37 @@ import com.github.mikephil.charting.formatter.ValueFormatter
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import kotlin.math.max
+
+private val DF_LABEL = SimpleDateFormat("MMM dd", Locale.getDefault())
+private val DF_ISO = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
 fun createLineChart(
     context: Context,
     label: String,
     values: List<Int?>,
-    rangeType: String // 👈 new param
+    rangeType: String,                    // "weekly" | "monthly" | "since_signup"
+    startDateIso: String? = null,         // inclusive
+    endDateIso: String? = null            // inclusive
 ): LineChart {
     val chart = LineChart(context)
     val lineData = LineData()
 
-    var currentSegment = mutableListOf<Entry>()
-
-    values.forEachIndexed { index, value ->
-        if (value != null) {
-            currentSegment.add(Entry(index.toFloat(), value.toFloat()))
-        } else {
-            if (currentSegment.isNotEmpty()) {
-                val segmentSet = createStyledDataSet(currentSegment, label)
-                lineData.addDataSet(segmentSet)
-                currentSegment = mutableListOf()
-            }
+    // build contiguous segments for non-null values
+    var current = mutableListOf<Entry>()
+    values.forEachIndexed { i, v ->
+        if (v != null) current.add(Entry(i.toFloat(), v.toFloat()))
+        else if (current.isNotEmpty()) {
+            lineData.addDataSet(styledSet(current, label))
+            current = mutableListOf()
         }
     }
+    if (current.isNotEmpty()) lineData.addDataSet(styledSet(current, label))
 
-    // Ghost points
-    values.forEachIndexed { index, value ->
-        if (value == null) {
-            val ghostEntry = Entry(index.toFloat(), 0f)
-            val ghostSet = LineDataSet(listOf(ghostEntry), "").apply {
+    // optional ghost markers for missing days
+    values.forEachIndexed { i, v ->
+        if (v == null) {
+            val ghost = LineDataSet(listOf(Entry(i.toFloat(), 0f)), "").apply {
                 color = Color.TRANSPARENT
                 setDrawCircles(true)
                 setCircleColor(Color.GRAY)
@@ -49,88 +51,47 @@ fun createLineChart(
                 setDrawValues(false)
                 setDrawHighlightIndicators(false)
             }
-            lineData.addDataSet(ghostSet)
+            lineData.addDataSet(ghost)
         }
-    }
-
-    if (currentSegment.isNotEmpty()) {
-        val segmentSet = createStyledDataSet(currentSegment, label)
-        lineData.addDataSet(segmentSet)
     }
 
     chart.data = lineData
+    chart.description.isEnabled = false
     chart.setDrawGridBackground(false)
     chart.setBackgroundColor(Color.WHITE)
-    chart.description.isEnabled = false
-    chart.setNoDataText("No data available")
     chart.axisRight.isEnabled = false
-    chart.axisLeft.granularity = 1f
     chart.axisLeft.axisMinimum = 0f
-
+    chart.axisLeft.granularity = 1f
     chart.axisLeft.valueFormatter = object : ValueFormatter() {
-        override fun getFormattedValue(value: Float): String = value.toInt().toString()
+        override fun getFormattedValue(value: Float) = value.toInt().toString()
     }
 
-    // ✅ Fix date labels depending on rangeType
-    // inside createLineChart(...)
-    val formatter = SimpleDateFormat("MMM dd", Locale.getDefault())
-    val calendar = Calendar.getInstance()
-
-    val dateLabels: List<String> = when (rangeType) {
-        "weekly" -> {
-            // last N days up to today
-            calendar.add(Calendar.DAY_OF_YEAR, -(values.size - 1))
-            List(values.size) {
-                val formatted = formatter.format(calendar.time)
-                calendar.add(Calendar.DAY_OF_YEAR, 1)
-                formatted
-            }
-        }
-        "monthly" -> {
-            // start from 1st day of current month → today
-            calendar.set(Calendar.DAY_OF_MONTH, 1)
-            List(values.size) {
-                val formatted = formatter.format(calendar.time)
-                calendar.add(Calendar.DAY_OF_YEAR, 1)
-                formatted
-            }
-        }
-        "since_signup" -> {
-            // use actual signup date
-            val startDate = com.example.tinnitusaiish.model.getStartDate()
-            val startCal = Calendar.getInstance().apply {
-                time = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(startDate)!!
-            }
-            List(values.size) {
-                val formatted = formatter.format(startCal.time)
-                startCal.add(Calendar.DAY_OF_YEAR, 1)
-                formatted
-            }
-        }
-        else -> emptyList()
-    }
-
+    // ---- build label range deterministically ----
+    val (startIso, endIso) = computeRange(rangeType, startDateIso, endDateIso)
+    val (labels, expectedCount) = buildDateLabels(startIso, endIso)
 
     chart.xAxis.apply {
         position = XAxis.XAxisPosition.BOTTOM
         granularity = 1f
         setDrawGridLines(false)
         labelRotationAngle = -45f
+        axisMinimum = 0f
+        axisMaximum = max(0, expectedCount - 1).toFloat()
         valueFormatter = object : ValueFormatter() {
             override fun getFormattedValue(value: Float): String {
-                val index = value.toInt()
-                return dateLabels.getOrNull(index) ?: ""
+                val i = value.toInt()
+                return if (i in labels.indices) labels[i] else ""
             }
-
             override fun getPointLabel(entry: Entry?): String {
-                val index = entry?.x?.toInt() ?: return ""
-                return values.getOrNull(index)?.toString() ?: "N/A"
+                val i = entry?.x?.toInt() ?: return ""
+                return values.getOrNull(i)?.toString() ?: "N/A"
             }
         }
     }
 
     chart.setTouchEnabled(false)
 
+    // fixed size for bitmap export
     chart.layout(0, 0, 800, 400)
     chart.measure(
         View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY),
@@ -141,31 +102,68 @@ fun createLineChart(
     return chart
 }
 
-
-private fun createStyledDataSet(entries: List<Entry>, label: String): LineDataSet {
-    return LineDataSet(entries, label).apply {
+private fun styledSet(entries: List<Entry>, label: String) =
+    LineDataSet(entries, label).apply {
         color = Color.BLUE
+        lineWidth = 3f
+        setDrawCircles(true)
+        circleRadius = 4f
+        setDrawCircleHole(false)
+        setDrawValues(true)
         valueTextColor = Color.BLACK
         valueTextSize = 12f
-        setDrawCircles(true)
-        setDrawValues(true)
-        circleRadius = 4f
-        lineWidth = 3f
         mode = LineDataSet.Mode.LINEAR
-        setDrawCircleHole(false)
-
         valueFormatter = object : ValueFormatter() {
-            override fun getFormattedValue(value: Float): String {
-                return value.toInt().toString()
+            override fun getFormattedValue(value: Float) = value.toInt().toString()
+        }
+    }
+
+private fun computeRange(
+    rangeType: String,
+    startOverride: String?,
+    endOverride: String?
+): Pair<String, String> {
+    val today = Calendar.getInstance()
+    val end = (endOverride?.let { DF_ISO.parse(it) } ?: today.time)
+
+    return when (rangeType) {
+        "weekly" -> {
+            val c = Calendar.getInstance().apply { time = end; add(Calendar.DAY_OF_YEAR, -6) }
+            (startOverride ?: DF_ISO.format(c.time)) to DF_ISO.format(end)
+        }
+        "monthly" -> {
+            val cStart = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) }
+            val cEnd = Calendar.getInstance().apply {
+                set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
             }
+            (startOverride ?: DF_ISO.format(cStart.time)) to (endOverride ?: DF_ISO.format(cEnd.time))
+        }
+        "since_signup" -> {
+            val startIso = startOverride ?: DF_ISO.format(today.time) // fallback (overridden by caller)
+            startIso to (endOverride ?: DF_ISO.format(today.time))
+        }
+        else -> {
+            val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -(6)) }
+            DF_ISO.format(c.time) to DF_ISO.format(end)
         }
     }
 }
 
+private fun buildDateLabels(startIso: String, endIso: String): Pair<List<String>, Int> {
+    val start = Calendar.getInstance().apply { time = DF_ISO.parse(startIso)!! }
+    val end = Calendar.getInstance().apply { time = DF_ISO.parse(endIso)!! }
 
-fun captureLineChartAsBitmap(chart: LineChart): Bitmap {
-    return Bitmap.createBitmap(chart.width, chart.height, Bitmap.Config.ARGB_8888).also { bitmap ->
-        val canvas = android.graphics.Canvas(bitmap)
+    val labels = mutableListOf<String>()
+    val c = start.clone() as Calendar
+    while (!c.after(end)) {
+        labels.add(DF_LABEL.format(c.time))
+        c.add(Calendar.DAY_OF_YEAR, 1)
+    }
+    return labels to labels.size
+}
+
+fun captureLineChartAsBitmap(chart: LineChart): Bitmap =
+    Bitmap.createBitmap(chart.width, chart.height, Bitmap.Config.ARGB_8888).also { bmp ->
+        val canvas = android.graphics.Canvas(bmp)
         chart.draw(canvas)
     }
-}

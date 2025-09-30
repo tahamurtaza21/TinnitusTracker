@@ -15,7 +15,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -53,7 +52,7 @@ fun ReportScreen(navController: NavController) {
     val email = prefs.getString("logged_in_email", "") ?: ""
 
     var reportRange by remember { mutableStateOf("weekly") }
-    val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
 
     var report by remember { mutableStateOf<WeeklyReport?>(null) }
     var weeklySummaries by remember { mutableStateOf<List<WeeklyReport>>(emptyList()) }
@@ -64,43 +63,79 @@ fun ReportScreen(navController: NavController) {
     var userNote by remember { mutableStateOf("") }
     val patientName = prefs.getString("logged_in_name", "Test User") ?: "Test User"
 
-    // 🔄 New states for suggestion popup (popup 3 & 4)
     var showSuggestionPopup by remember { mutableStateOf(false) }
     var suggestionMessage by remember { mutableStateOf("") }
 
-    // 🔄 Load report when range changes
     LaunchedEffect(reportRange) {
         scope.launch {
             isLoading = true
             statusMessage = null
             try {
                 val repo = ReportRepository()
-                val allCheckIns = repo.fetchCheckIns(email)
-                val filtered = repo.filterByRange(allCheckIns, reportRange, today)
+                val all = repo.fetchCheckIns(email)
+                val filtered = repo.filterByRange(all, reportRange, todayIso)
 
-                val finalCheckIns = if (reportRange == "weekly") {
-                    repo.padWeeklyData(filtered, email)
-                } else filtered
+                val finalCheckIns = if (reportRange == "weekly") repo.padWeeklyData(filtered, email) else filtered
+                val sorted = finalCheckIns.sortedBy { it.date }
 
-                val sortedCheckIns = finalCheckIns.sortedBy { it.date }
-                report = generateReport(sortedCheckIns)
-                weeklySummaries =
-                    if (reportRange == "since_signup") repo.generateWeeklyChunks(sortedCheckIns)
-                    else emptyList()
+                report = generateReport(sorted)
+                weeklySummaries = if (reportRange == "since_signup") repo.generateWeeklyChunks(sorted) else emptyList()
 
-                val tinnitusData = if (reportRange == "since_signup")
-                    weeklySummaries.map { it.averageTinnitus.toInt() }
-                else report?.tinnitusLevels ?: emptyList()
+                // ---- Build padded daily series for graphs ----
+                val (startIso, endIso) = when (reportRange) {
+                    "weekly" -> {
+                        val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -6) }
+                        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time) to todayIso
+                    }
+                    "monthly" -> {
+                        val cStart = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) }
+                        val cEnd = Calendar.getInstance().apply {
+                            set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
+                        }
+                        val df = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                        df.format(cStart.time) to df.format(cEnd.time)
+                    }
+                    "since_signup" -> {
+                        val start = sorted.firstOrNull()?.date ?: todayIso
+                        start to todayIso
+                    }
+                    else -> todayIso to todayIso
+                }
 
-                val anxietyData = if (reportRange == "since_signup")
-                    weeklySummaries.map { it.averageAnxiety.toInt() }
-                else report?.anxietyLevels ?: emptyList()
+                val df = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                val byDate = sorted.associateBy { it.date }
+                val tSeries = mutableListOf<Int?>()
+                val aSeries = mutableListOf<Int?>()
 
-                val tinnitusChart = createLineChart(context, "Tinnitus Trend", tinnitusData, reportRange)
-                val anxietyChart = createLineChart(context, "Anxiety Trend", anxietyData, reportRange)
+                val c = Calendar.getInstance().apply { time = df.parse(startIso)!! }
+                val end = Calendar.getInstance().apply { time = df.parse(endIso)!! }
+                while (!c.after(end)) {
+                    val d = df.format(c.time)
+                    val ci = byDate[d]
+                    tSeries.add(ci?.tinnitusLevel)
+                    aSeries.add(ci?.anxietyLevel)
+                    c.add(Calendar.DAY_OF_YEAR, 1)
+                }
 
-                tinnitusBitmap = captureLineChartAsBitmap(tinnitusChart)
-                anxietyBitmap = captureLineChartAsBitmap(anxietyChart)
+                val tChart = createLineChart(
+                    context,
+                    label = "Tinnitus Trend",
+                    values = tSeries,
+                    rangeType = reportRange,
+                    startDateIso = startIso,
+                    endDateIso = endIso
+                )
+                val aChart = createLineChart(
+                    context,
+                    label = "Anxiety Trend",
+                    values = aSeries,
+                    rangeType = reportRange,
+                    startDateIso = startIso,
+                    endDateIso = endIso
+                )
+
+                tinnitusBitmap = captureLineChartAsBitmap(tChart)
+                anxietyBitmap = captureLineChartAsBitmap(aChart)
 
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -118,14 +153,13 @@ fun ReportScreen(navController: NavController) {
             .verticalScroll(rememberScrollState())
     ) {
         ReportHeader(reportRange = reportRange, onRangeChange = { reportRange = it })
-
         ReportStatusView(isLoading, statusMessage)
 
         if (!isLoading && report != null) {
             ReportContent(
                 report = report!!,
                 reportRange = reportRange,
-                endDate = today,
+                endDate = todayIso,
                 tinnitusBitmap = tinnitusBitmap,
                 anxietyBitmap = anxietyBitmap,
                 weeklySummaries = weeklySummaries
@@ -138,9 +172,7 @@ fun ReportScreen(navController: NavController) {
             value = userNote,
             onValueChange = { userNote = it },
             label = { Text("Optional Notes for Report") },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp)
+            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
         )
 
         ReportExportButton(
@@ -153,22 +185,15 @@ fun ReportScreen(navController: NavController) {
             onStatus = { msg ->
                 statusMessage = msg
                 if (msg.startsWith("✅")) {
-                    // After successful send → check averages for popup 3 & 4
                     report?.let { r ->
                         if (reportRange == "weekly") {
-                            val avgScore = (r.averageTinnitus + r.averageAnxiety) / 2.0
-                            when {
-                                avgScore >= 7 -> {
-                                    suggestionMessage =
-                                        "Your average weekly scores are high. Contact your audiologist for expert advice."
-                                    showSuggestionPopup = true
-                                }
-                                avgScore <= 5 -> {
-                                    suggestionMessage =
-                                        "You're making progress. Continue practicing."
-                                    showSuggestionPopup = true
-                                }
-                            }
+                            val avg = (r.averageTinnitus + r.averageAnxiety) / 2.0
+                            suggestionMessage = if (avg >= 7) {
+                                "Your average weekly scores are high. Contact your audiologist for expert advice."
+                            } else if (avg <= 5) {
+                                "You're making progress. Continue practicing."
+                            } else ""
+                            showSuggestionPopup = suggestionMessage.isNotEmpty()
                         }
                     }
                 }
@@ -177,15 +202,12 @@ fun ReportScreen(navController: NavController) {
         )
     }
 
-    // Popup 3 & 4
     if (showSuggestionPopup) {
         AlertDialog(
             onDismissRequest = { showSuggestionPopup = false },
             title = { Text("Technique Suggestion") },
             text = { Text(suggestionMessage) },
-            confirmButton = {
-                Button(onClick = { showSuggestionPopup = false }) { Text("OK") }
-            }
+            confirmButton = { Button(onClick = { showSuggestionPopup = false }) { Text("OK") } }
         )
     }
 }
@@ -194,9 +216,7 @@ fun ReportScreen(navController: NavController) {
 fun ReportHeader(reportRange: String, onRangeChange: (String) -> Unit) {
     Text("Progress Report", style = MaterialTheme.typography.headlineSmall)
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 16.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceEvenly
     ) {
         Button(onClick = { onRangeChange("weekly") }, enabled = reportRange != "weekly") { Text("Weekly") }
@@ -208,25 +228,14 @@ fun ReportHeader(reportRange: String, onRangeChange: (String) -> Unit) {
 @Composable
 fun ReportStatusView(isLoading: Boolean, statusMessage: String?) {
     if (isLoading) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator()
             Spacer(Modifier.height(12.dp))
             Text("Loading report...")
         }
     }
-
-    statusMessage?.let { msg ->
-        Text(
-            text = msg,
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(8.dp)
-        )
+    statusMessage?.let {
+        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(8.dp))
     }
 }
 
@@ -240,7 +249,6 @@ fun ReportContent(
     weeklySummaries: List<WeeklyReport>
 ) {
     ReportRangeLabel(reportRange, endDate)
-
     ReportCharts(tinnitusBitmap, anxietyBitmap)
 
     val weeks = if (reportRange == "since_signup") weeklySummaries.size else 1
@@ -254,67 +262,48 @@ fun ReportContent(
 
     ReportSection("Relaxation Used", "$relaxRatio% of days")
     ReportSection("Sound Therapy Used", "$soundRatio% of days")
-
-    if (reportRange == "since_signup") {
-        Spacer(Modifier.height(16.dp))
-        Text("Week-by-week summary:", style = MaterialTheme.typography.titleMedium)
-        weeklySummaries.forEachIndexed { i, week ->
-            Divider(modifier = Modifier.padding(vertical = 4.dp))
-            ReportSection(
-                "Week ${i + 1}",
-                "Tinnitus: %.1f, Anxiety: %.1f".format(
-                    week.averageTinnitus,
-                    week.averageAnxiety
-                )
-            )
-        }
-    }
 }
 
 @Composable
-fun ReportRangeLabel(reportRange: String, endDate: String) {
-    val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-    val rangeLabel = when (reportRange) {
-        "weekly", "monthly" -> {
-            val calendar = Calendar.getInstance()
-            if (reportRange == "weekly") calendar.add(Calendar.DAY_OF_YEAR, -6)
-            if (reportRange == "monthly") calendar.add(Calendar.DAY_OF_YEAR, -29)
-            val start = dateFormat.format(calendar.time)
-            "Date Range: $start to $endDate"
+fun ReportRangeLabel(range: String, endDate: String) {
+    val df = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val cal = Calendar.getInstance()
+    val text = when (range) {
+        "weekly" -> {
+            val start = (cal.clone() as Calendar).apply { add(Calendar.DAY_OF_YEAR, -6) }
+            "Date Range: ${df.format(start.time)} to $endDate"
+        }
+        "monthly" -> {
+            val start = (cal.clone() as Calendar).apply { set(Calendar.DAY_OF_MONTH, 1) }
+            val end = (cal.clone() as Calendar).apply { set(Calendar.DAY_OF_MONTH, cal.getActualMaximum(Calendar.DAY_OF_MONTH)) }
+            "Date Range: ${df.format(start.time)} to ${df.format(end.time)}"
         }
         "since_signup" -> "Full history since signup"
         else -> ""
     }
-    Text(rangeLabel, style = MaterialTheme.typography.bodyMedium)
+    Text(text, style = MaterialTheme.typography.bodyMedium)
 }
 
 @Composable
 fun ReportCharts(tinnitusBitmap: Bitmap?, anxietyBitmap: Bitmap?) {
     tinnitusBitmap?.let {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Image(bitmap = it.asImageBitmap(), contentDescription = null)
         }
         Spacer(Modifier.height(8.dp))
     }
     anxietyBitmap?.let {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Image(bitmap = it.asImageBitmap(), contentDescription = null)
         }
         Spacer(Modifier.height(8.dp))
     }
 }
 
-@Composable
-fun ReportSection(label: String, value: String) {
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
-        Text(text = label, style = MaterialTheme.typography.labelLarge)
-        Text(text = value, style = MaterialTheme.typography.bodyLarge)
+@Composable fun ReportSection(label: String, value: String) {
+    Column(Modifier.padding(vertical = 4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelLarge)
+        Text(value, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
@@ -334,45 +323,30 @@ fun ReportExportButton(
 
     Button(
         onClick = {
-            report?.let { reportData ->
+            report?.let { r ->
                 scope.launch {
-                    onLoading(true)
-                    onStatus("")
+                    onLoading(true); onStatus("")
                     try {
                         val exporter = ReportExporter()
-
-                        val tinnitusData = if (reportRange == "since_signup")
-                            weeklySummaries.map { it.averageTinnitus.toInt() }
-                        else reportData.tinnitusLevels
-
-                        val anxietyData = if (reportRange == "since_signup")
-                            weeklySummaries.map { it.averageAnxiety.toInt() }
-                        else reportData.anxietyLevels
-
                         val result = exporter.exportAndSendReport(
                             context = context,
-                            report = reportData,
-                            tinnitusData = tinnitusData,
-                            anxietyData = anxietyData,
+                            report = r,
+                            tinnitusData = r.tinnitusLevels,
+                            anxietyData = r.anxietyLevels,
                             patientName = patientName,
                             userNote = userNote,
                             doctorEmail = "tahamurtaza21@outlook.com",
                             reportRange = reportRange
                         )
-
                         result.fold(
                             onSuccess = { onStatus("✅ $it") },
                             onFailure = { onStatus("❌ Failed: ${it.localizedMessage}") }
                         )
-                    } finally {
-                        onLoading(false)
-                    }
+                    } finally { onLoading(false) }
                 }
             }
         },
         modifier = Modifier.fillMaxWidth(),
         enabled = !isLoading
-    ) {
-        Text("Send to Doctor")
-    }
+    ) { Text("Send to Doctor") }
 }
