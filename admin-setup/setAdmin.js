@@ -5,8 +5,7 @@ admin.initializeApp({
   credential: admin.credential.cert(require("./serviceAccountKey.json")),
 });
 
-// Email you want to make admin
-const email = "tahamurtaza21@outlook.com";
+const email = "nimisharaj80@gmail.com";
 
 async function setAdmin() {
   try {
@@ -15,8 +14,13 @@ async function setAdmin() {
 
     // Assign custom claims
     await admin.auth().setCustomUserClaims(user.uid, { role: "admin" });
-
     console.log(`✅ ${email} is now an admin`);
+
+    // Delete their Firestore "users" document
+    const db = admin.firestore();
+    await db.collection("users").doc(user.uid).delete();
+    console.log(`🗑️ Deleted Firestore user doc for ${email}`);
+
     process.exit(0);
   } catch (error) {
     console.error("❌ Error setting admin role:", error);
