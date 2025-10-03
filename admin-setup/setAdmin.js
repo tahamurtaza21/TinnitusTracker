@@ -21,6 +21,14 @@ async function setAdmin() {
     await db.collection("users").doc(user.uid).delete();
     console.log(`🗑️ Deleted Firestore user doc for ${email}`);
 
+    // add to admins collection
+    await db.collection("admins").doc(user.uid).set({
+      uid: user.uid,
+      email: user.email,
+      name: user.displayName || user.email.split("@")[0],
+      signupDate: new Date()
+    });
+
     process.exit(0);
   } catch (error) {
     console.error("❌ Error setting admin role:", error);
