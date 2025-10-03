@@ -159,6 +159,8 @@ fun SignUpScreen(
                             val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
                             prefs.edit()
                                 .putString("logged_in_email", uiState.email)
+                                .putString("logged_in_role", "user")
+                                .putString("logged_in_name", uiState.name)
                                 .apply()
 
                             Toast.makeText(context, "Account created successfully!", Toast.LENGTH_LONG).show()

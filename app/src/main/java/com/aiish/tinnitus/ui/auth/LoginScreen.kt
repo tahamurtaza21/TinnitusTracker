@@ -129,6 +129,7 @@ fun LoginScreen(
                         result.onSuccess { (email, role) ->
                             Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
 
+
                             // Save user role + email in SharedPreferences
                             val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
                             prefs.edit()

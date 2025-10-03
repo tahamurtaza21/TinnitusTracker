@@ -68,13 +68,25 @@ class AuthRepository(
             val tokenResult = user?.getIdToken(true)?.await()
             val role = tokenResult?.claims?.get("role") as? String
 
-            // Save locally
             val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-            prefs.edit().putString("logged_in_email", user?.email).apply()
+
+            // ✅ Fetch name from Firestore
+            var name: String? = null
+            user?.uid?.let { uid ->
+                val snapshot = db.collection("users").document(uid).get().await()
+                name = snapshot.getString("name")
+            }
+
+            prefs.edit()
+                .putString("logged_in_email", user?.email)
+                .putString("logged_in_role", role ?: "user")
+                .putString("logged_in_name", name ?: user?.email?.substringBefore("@") ?: "Unknown")
+                .apply()
 
             Result.success(user?.email to role) // role might be null if no claim
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
+
 }
