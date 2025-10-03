@@ -1,6 +1,7 @@
 package com.aiish.tinnitus.ui.user
 
 import android.graphics.Bitmap
+import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -37,7 +38,9 @@ import com.aiish.tinnitus.data.ReportExporter
 import com.aiish.tinnitus.data.ReportRepository
 import com.aiish.tinnitus.model.WeeklyReport
 import com.aiish.tinnitus.model.generateReport
+import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -351,21 +354,35 @@ fun ReportExportButton(
                 scope.launch {
                     onLoading(true); onStatus("")
                     try {
+                        val db = FirebaseFirestore.getInstance()   // ✅ FIX
+
+                        // ✅ fetch all admins from Firestore
+                        val snapshot = db.collection("admins").get().await()
+                        val adminEmails = snapshot.documents.mapNotNull { it.getString("email") }
+
+                        // ✅ Debug: log and show which admins will receive the email
+                        Log.d("ReportExportButton", "Sending report to admins: $adminEmails")
+                        onStatus("📧 Sending to: ${adminEmails.joinToString(", ")}")
+
                         val exporter = ReportExporter()
-                        val result = exporter.exportAndSendReport(
-                            context = context,
-                            report = r,
-                            tinnitusData = r.tinnitusLevels,
-                            anxietyData = r.anxietyLevels,
-                            patientName = patientName,
-                            userNote = userNote,
-                            doctorEmail = "tahamurtaza21@outlook.com",
-                            reportRange = reportRange
-                        )
-                        result.fold(
-                            onSuccess = { onStatus("✅ $it") },
-                            onFailure = { onStatus("❌ Failed: ${it.localizedMessage}") }
-                        )
+
+                        // send report to every admin
+                        adminEmails.forEach { adminEmail ->
+                            val result = exporter.exportAndSendReport(
+                                context = context,
+                                report = r,
+                                tinnitusData = r.tinnitusLevels,
+                                anxietyData = r.anxietyLevels,
+                                patientName = patientName,
+                                userNote = userNote,
+                                doctorEmail = adminEmail,   // 👈 dynamic now
+                                reportRange = reportRange
+                            )
+                            result.fold(
+                                onSuccess = { onStatus("✅ Sent to $adminEmail") },
+                                onFailure = { onStatus("❌ Failed for $adminEmail: ${it.localizedMessage}") }
+                            )
+                        }
                     } finally { onLoading(false) }
                 }
             }
@@ -374,3 +391,5 @@ fun ReportExportButton(
         enabled = !isLoading
     ) { Text("Send to Doctor") }
 }
+
+
