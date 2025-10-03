@@ -366,26 +366,8 @@ fun ReportExportButton(
 
                         val exporter = ReportExporter()
 
-                        // send report to every admin
-//                        adminEmails.forEach { adminEmail ->
-//                            val result = exporter.exportAndSendReport(
-//                                context = context,
-//                                report = r,
-//                                tinnitusData = r.tinnitusLevels,
-//                                anxietyData = r.anxietyLevels,
-//                                patientName = patientName,
-//                                userNote = userNote,
-//                                doctorEmail = adminEmail,   // 👈 dynamic now
-//                                reportRange = reportRange
-//                            )
-//                            result.fold(
-//                                onSuccess = { onStatus("✅ Sent to $adminEmail") },
-//                                onFailure = { onStatus("❌ Failed for $adminEmail: ${it.localizedMessage}") }
-//                            )
-//                        }
-                        // ✅ only send to the first admin email (for testing)
-                        val firstAdmin = adminEmails.firstOrNull()
-                        if (firstAdmin != null) {
+//                         send report to every admin
+                        adminEmails.forEach { adminEmail ->
                             val result = exporter.exportAndSendReport(
                                 context = context,
                                 report = r,
@@ -393,16 +375,34 @@ fun ReportExportButton(
                                 anxietyData = r.anxietyLevels,
                                 patientName = patientName,
                                 userNote = userNote,
-                                doctorEmail = firstAdmin,
+                                doctorEmail = adminEmail,   // 👈 dynamic now
                                 reportRange = reportRange
                             )
                             result.fold(
-                                onSuccess = { onStatus("✅ Sent only to $firstAdmin (test mode)") },
-                                onFailure = { onStatus("❌ Failed for $firstAdmin: ${it.localizedMessage}") }
+                                onSuccess = { onStatus("✅ Sent to $adminEmail") },
+                                onFailure = { onStatus("❌ Failed for $adminEmail: ${it.localizedMessage}") }
                             )
-                        } else {
-                            onStatus("❌ No admins found in Firestore")
                         }
+//                        // ✅ only send to the first admin email (for testing)
+//                        val firstAdmin = adminEmails.firstOrNull()
+//                        if (firstAdmin != null) {
+//                            val result = exporter.exportAndSendReport(
+//                                context = context,
+//                                report = r,
+//                                tinnitusData = r.tinnitusLevels,
+//                                anxietyData = r.anxietyLevels,
+//                                patientName = patientName,
+//                                userNote = userNote,
+//                                doctorEmail = firstAdmin,
+//                                reportRange = reportRange
+//                            )
+//                            result.fold(
+//                                onSuccess = { onStatus("✅ Sent only to $firstAdmin (test mode)") },
+//                                onFailure = { onStatus("❌ Failed for $firstAdmin: ${it.localizedMessage}") }
+//                            )
+//                        } else {
+//                            onStatus("❌ No admins found in Firestore")
+//                        }
                     } finally { onLoading(false) }
                 }
             }
