@@ -367,7 +367,7 @@ fun ReportExportButton(
                         val exporter = ReportExporter()
 
 //                         send report to every admin
-                        adminEmails.forEach { adminEmail ->
+git                         adminEmails.forEach { adminEmail ->
                             val result = exporter.exportAndSendReport(
                                 context = context,
                                 report = r,
