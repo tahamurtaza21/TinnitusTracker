@@ -1,6 +1,7 @@
 package com.aiish.tinnitus.notifications
 
 import android.content.Context
+import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -20,8 +21,16 @@ fun scheduleDailyCheckInReminder(context: Context) {
 
     val workRequest = PeriodicWorkRequestBuilder<CheckInReminderWorker>(
         1, TimeUnit.DAYS
-    ).setInitialDelay(delay, TimeUnit.MILLISECONDS)
+    )
+        .setInitialDelay(delay, TimeUnit.MILLISECONDS)
+        .setConstraints(
+            Constraints.Builder()
+                .setRequiresBatteryNotLow(false)  // run even if battery is low
+                .setRequiresDeviceIdle(false)     // don't wait for idle mode
+                .build()
+        )
         .build()
+
 
     WorkManager.getInstance(context).enqueueUniquePeriodicWork(
         "daily_checkin_reminder",

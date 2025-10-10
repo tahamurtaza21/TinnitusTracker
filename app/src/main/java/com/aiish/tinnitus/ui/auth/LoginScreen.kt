@@ -1,10 +1,11 @@
 package com.aiish.tinnitus.ui.auth
 
-import android.app.Activity
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,14 +33,15 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.aiish.tinnitus.data.AuthRepository
 import com.aiish.tinnitus.notifications.CheckInReminderWorker
 import com.aiish.tinnitus.notifications.scheduleDailyCheckInReminder
 import com.aiish.tinnitus.util.LoginValidator
+import com.aiish.tinnitus.util.requestIgnoreBatteryOptimization
 import kotlinx.coroutines.launch
 
 @Composable
@@ -116,6 +118,19 @@ fun LoginScreen(
             )
         }
 
+        // ✅ Setup notification permission launcher
+        val permissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission()
+        ) { isGranted ->
+            if (isGranted) {
+                scheduleDailyCheckInReminder(context)
+                val nowWork = OneTimeWorkRequestBuilder<CheckInReminderWorker>().build()
+                WorkManager.getInstance(context).enqueue(nowWork)
+            } else {
+                Toast.makeText(context, "Notification permission denied", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         Button(
             onClick = {
                 uiState = uiState.copy(
@@ -129,42 +144,42 @@ fun LoginScreen(
                         result.onSuccess { (email, role) ->
                             Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
 
-
-                            // Save user role + email in SharedPreferences
+                            // ✅ Save user info
                             val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-                            prefs.edit()
-                                .putString("logged_in_email", email)
-                                .putString("logged_in_role", role)
-                                .apply()
+                            prefs.edit {
+                                putString("logged_in_email", email)
+                                    .putString("logged_in_role", role)
+                            }
 
-                            // Notification permissions (API 33+)
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                if (ContextCompat.checkSelfPermission(
-                                        context,
-                                        android.Manifest.permission.POST_NOTIFICATIONS
-                                    ) != PackageManager.PERMISSION_GRANTED
-                                ) {
-                                    ActivityCompat.requestPermissions(
-                                        context as Activity,
-                                        arrayOf(android.Manifest.permission.POST_NOTIFICATIONS),
-                                        1001
-                                    )
+                            // ✅ Schedule notifications for non-admins
+                            if (role != "admin") {
+                                requestIgnoreBatteryOptimization(context)
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    if (ContextCompat.checkSelfPermission(
+                                            context,
+                                            android.Manifest.permission.POST_NOTIFICATIONS
+                                        ) != PackageManager.PERMISSION_GRANTED
+                                    ) {
+                                        permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        scheduleDailyCheckInReminder(context)
+                                        val nowWork = OneTimeWorkRequestBuilder<CheckInReminderWorker>().build()
+                                        WorkManager.getInstance(context).enqueue(nowWork)
+                                    }
+                                } else {
+                                    scheduleDailyCheckInReminder(context)
+                                    val nowWork = OneTimeWorkRequestBuilder<CheckInReminderWorker>().build()
+                                    WorkManager.getInstance(context).enqueue(nowWork)
                                 }
                             }
 
-                            // Daily reminder setup only for non-admins
-                            if (role != "admin") {
-                                scheduleDailyCheckInReminder(context)
-                                val nowWork = OneTimeWorkRequestBuilder<CheckInReminderWorker>().build()
-                                WorkManager.getInstance(context).enqueue(nowWork)
-                            }
-
-                            // Navigate based on role
+                            // ✅ Navigate by role
                             if (role == "admin") {
                                 onAdminLoginSuccess()
                             } else {
                                 onLoginSuccess()
                             }
+
                         }.onFailure { e ->
                             uiState = uiState.copy(loginError = "Login failed: ${e.message}")
                         }
@@ -177,6 +192,7 @@ fun LoginScreen(
         ) {
             Text("LOG IN")
         }
+
 
         TextButton(
             onClick = { /* forgot password logic */ },

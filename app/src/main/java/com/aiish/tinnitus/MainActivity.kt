@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.aiish.tinnitus.notifications.scheduleDailyCheckInReminder
 import com.aiish.tinnitus.ui.admin.AdminDashboardScreen
 import com.aiish.tinnitus.ui.admin.AdminUserReportsScreen
 import com.aiish.tinnitus.ui.auth.LoginScreen
@@ -23,6 +24,11 @@ class MainActivity : ComponentActivity() {
 
         // 🔐 Check if user is logged in via Firebase
         val isLoggedIn = FirebaseAuth.getInstance().currentUser != null
+
+        if (isLoggedIn) {
+            // ✅ Always reschedule daily reminders at startup
+            scheduleDailyCheckInReminder(this)
+        }
 
         setContent {
 
