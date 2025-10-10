@@ -47,11 +47,20 @@ class MainActivity : ComponentActivity() {
             ) {
                 composable("login") {
                     LoginScreen(
-                        onLoginSuccess = { navController.navigate("home") },
-                        onAdminLoginSuccess = { navController.navigate("admin_dashboard") },
+                        onLoginSuccess = {
+                            navController.navigate("home") {
+                                popUpTo("login") { inclusive = true } // ✅ clears login from back stack
+                            }
+                        },
+                        onAdminLoginSuccess = {
+                            navController.navigate("admin_dashboard") {
+                                popUpTo("login") { inclusive = true }
+                            }
+                        },
                         onNavigateToSignUp = { navController.navigate("signup") }
                     )
                 }
+
 
                 composable("signup") {
                     SignUpScreen(

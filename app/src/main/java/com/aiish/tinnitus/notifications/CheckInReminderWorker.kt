@@ -51,6 +51,7 @@ class CheckInReminderWorker(
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+            .setAutoCancel(true)
             .build()
 
         // ✅ Only notify if permission is granted (API 33+ safety)
