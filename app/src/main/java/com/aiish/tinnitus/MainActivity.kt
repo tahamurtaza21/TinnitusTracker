@@ -4,6 +4,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -16,85 +21,179 @@ import com.aiish.tinnitus.ui.user.CheckInScreen
 import com.aiish.tinnitus.ui.user.HomeScreen
 import com.aiish.tinnitus.ui.user.ReportScreen
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.tasks.await
 
 class MainActivity : ComponentActivity() {
+
+    private var isOnLoginScreen = false
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (isOnLoginScreen) {
+            // ✅ Exit app when on login screen - use finishAffinity to clear everything
+            finishAffinity()
+        } else {
+            @Suppress("DEPRECATION")
+            super.onBackPressed()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        super.onCreate(null)  // ✅ Pass null to prevent state restoration
         enableEdgeToEdge()
 
-        // 🔐 Check if user is logged in via Firebase
-        val isLoggedIn = FirebaseAuth.getInstance().currentUser != null
-
-        if (isLoggedIn) {
-            // ✅ Always reschedule daily reminders at startup
-            scheduleDailyCheckInReminder(this)
-        }
-
         setContent {
+            // ✅ Check auth state and role dynamically
+            var startDestination by remember { mutableStateOf<String?>(null) }
+            val currentUser = FirebaseAuth.getInstance().currentUser
 
-            // added dummy data
-
-//            val email = "tahamurtaza15@gmail.com"
-//            deleteAllCheckIns(this, email)
-//            insertFakeCheckInData(this, email)
-
-            val navController = rememberNavController()
-
-            // Optional override to go directly to "checkin" if triggered by notification
-            val startDestination = if (intent?.getStringExtra("navigate_to") == "checkin") {
-                "checkin"
-            } else {
-                "home"
+            LaunchedEffect(Unit) {
+                // ✅ ALWAYS start at login to avoid back stack issues
+                // The login screen will immediately navigate if user is already logged in
+                startDestination = "login"
             }
 
-            NavHost(
-                navController = navController,
-                startDestination = if (isLoggedIn) "home" else "login"
-            ) {
-                composable("login") {
-                    LoginScreen(
-                        onLoginSuccess = {
-                            navController.navigate("home") {
-                                popUpTo("login") { inclusive = true } // ✅ clears login from back stack
+            // ✅ Wait until we determine the start destination
+            if (startDestination != null) {
+                val navController = rememberNavController()
+
+                NavHost(
+                    navController = navController,
+                    startDestination = startDestination!!
+                ) {
+                    composable("login") {
+                        // ✅ Track that we're on login screen
+                        LaunchedEffect(Unit) {
+                            isOnLoginScreen = true
+
+                            // ✅ Auto-navigate if already logged in
+                            val currentUser = FirebaseAuth.getInstance().currentUser
+                            if (currentUser != null) {
+                                try {
+                                    val tokenResult = currentUser.getIdToken(true).await()
+                                    val role = tokenResult.claims["role"] as? String
+
+                                    if (role == "admin") {
+                                        isOnLoginScreen = false
+                                        navController.navigate("admin_dashboard") {
+                                            popUpTo(0) { inclusive = true }
+                                        }
+                                    } else {
+                                        scheduleDailyCheckInReminder(this@MainActivity)
+                                        isOnLoginScreen = false
+                                        navController.navigate("home") {
+                                            popUpTo(0) { inclusive = true }
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    // Stay on login if error
+                                }
                             }
-                        },
-                        onAdminLoginSuccess = {
-                            navController.navigate("admin_dashboard") {
-                                popUpTo("login") { inclusive = true }
+                        }
+
+                        LoginScreen(
+                            onLoginSuccess = {
+                                isOnLoginScreen = false
+                                navController.navigate("home") {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            },
+                            onAdminLoginSuccess = {
+                                isOnLoginScreen = false
+                                navController.navigate("admin_dashboard") {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                            },
+                            onNavigateToSignUp = {
+                                isOnLoginScreen = false
+                                navController.navigate("signup")
                             }
-                        },
-                        onNavigateToSignUp = { navController.navigate("signup") }
-                    )
-                }
+                        )
+                    }
 
+                    composable("signup") {
+                        LaunchedEffect(Unit) {
+                            isOnLoginScreen = false
+                        }
+                        SignUpScreen(
+                            onSignUpSuccess = { navController.navigate("login") },
+                            onNavigateToLogin = { navController.navigate("login") }
+                        )
+                    }
 
-                composable("signup") {
-                    SignUpScreen(
-                        onSignUpSuccess = { navController.navigate("login") },
-                        onNavigateToLogin = { navController.navigate("login") }
-                    )
-                }
+                    composable("home") {
+                        LaunchedEffect(Unit) {
+                            isOnLoginScreen = false
+                        }
 
-                composable("home") {
-                    HomeScreen(navController = navController)
-                }
+                        HomeScreen(
+                            navController = navController,
+                            onLogout = {
+                                android.util.Log.d("MainActivity", "Logout clicked - current user: ${FirebaseAuth.getInstance().currentUser?.email}")
+                                FirebaseAuth.getInstance().signOut()
+                                android.util.Log.d("MainActivity", "After signout - current user: ${FirebaseAuth.getInstance().currentUser}")
 
-                composable("checkin") {
-                    CheckInScreen(navController = navController)
-                }
-                composable("report") {
-                    ReportScreen(navController = navController)
-                }
-                composable("admin_dashboard") {
-                    AdminDashboardScreen(navController = navController)
-                }
-                composable("admin_user_reports/{uid}") { backStackEntry ->
-                    val uid = backStackEntry.arguments?.getString("uid") ?: ""
-                    AdminUserReportsScreen(uid = uid)
-                }
+                                // ✅ Kill everything and restart fresh
+                                finishAffinity()
+                                val intent = packageManager.getLaunchIntentForPackage(packageName)
+                                intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                                intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                startActivity(intent)
+                            }
+                        )
+                    }
 
+                    composable("checkin") {
+                        LaunchedEffect(Unit) {
+                            isOnLoginScreen = false
+                        }
+                        CheckInScreen(navController = navController)
+                    }
+
+                    composable("report") {
+                        LaunchedEffect(Unit) {
+                            isOnLoginScreen = false
+                        }
+                        ReportScreen(navController = navController)
+                    }
+
+                    composable("admin_dashboard") {
+                        LaunchedEffect(Unit) {
+                            isOnLoginScreen = false
+                        }
+
+                        // ✅ Handle back button to sign out
+                        androidx.activity.compose.BackHandler {
+                            FirebaseAuth.getInstance().signOut()
+                            finishAffinity()
+                            val intent = packageManager.getLaunchIntentForPackage(packageName)
+                            intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                            intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            startActivity(intent)
+                        }
+
+                        AdminDashboardScreen(
+                            navController = navController,
+                            onLogout = {
+                                FirebaseAuth.getInstance().signOut()
+                                finishAffinity()
+                                val intent = packageManager.getLaunchIntentForPackage(packageName)
+                                intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                                intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                startActivity(intent)
+                            }
+                        )
+                    }
+
+                    composable("admin_user_reports/{uid}") { backStackEntry ->
+                        LaunchedEffect(Unit) {
+                            isOnLoginScreen = false
+                        }
+                        val uid = backStackEntry.arguments?.getString("uid") ?: ""
+                        AdminUserReportsScreen(uid = uid)
+                    }
+                }
             }
         }
     }
 }
-

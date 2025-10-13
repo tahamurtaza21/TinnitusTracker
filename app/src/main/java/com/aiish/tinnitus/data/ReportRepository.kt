@@ -8,7 +8,6 @@ import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
 import java.util.Locale
 
 class ReportRepository(
@@ -42,20 +41,34 @@ class ReportRepository(
     }
 
     fun filterByRange(allCheckIns: List<CheckIn>, range: String, endDate: String): List<CheckIn> {
-        val calendar = Calendar.getInstance()
-        if (range == "weekly") calendar.add(Calendar.DAY_OF_YEAR, -6)
-        if (range == "monthly") calendar.add(Calendar.DAY_OF_YEAR, -29)
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val today = Calendar.getInstance()
 
-        val limitDate = calendar.time
-        val endDateParsed = dateFormat.parse(endDate) ?: Date()
+        // ✅ FIXED: End date is TODAY, not some past date
+        val endDateParsed = dateFormat.parse(endDate) ?: today.time
 
-        return when (range) {
-            "weekly", "monthly" -> allCheckIns.filter {
-                val checkInDate = dateFormat.parse(it.date)
-                checkInDate != null && !checkInDate.before(limitDate) && !checkInDate.after(endDateParsed)
+        val startCal = Calendar.getInstance()
+        startCal.time = endDateParsed
+
+        when (range) {
+            "weekly" -> startCal.add(Calendar.DAY_OF_YEAR, -6) // 7 days
+            "monthly" -> startCal.add(Calendar.DAY_OF_YEAR, -29) // 30 days
+            "since_signup" -> {
+                // Keep all data from signup to today
+                return allCheckIns.filter {
+                    val checkInDate = dateFormat.parse(it.date)
+                    checkInDate != null && !checkInDate.after(endDateParsed)
+                }
             }
-            "since_signup" -> allCheckIns
-            else -> emptyList()
+        }
+
+        val startDate = startCal.time
+
+        return allCheckIns.filter {
+            val checkInDate = dateFormat.parse(it.date)
+            checkInDate != null &&
+                    !checkInDate.before(startDate) &&
+                    !checkInDate.after(endDateParsed)
         }
     }
 

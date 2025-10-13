@@ -1,6 +1,5 @@
 package com.aiish.tinnitus.ui.user
 
-import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -36,17 +34,11 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 
 @Composable
-fun HomeScreen(navController: NavController) {
-    val context = LocalContext.current
+fun HomeScreen(
+    navController: NavController,
+    onLogout: () -> Unit  // ✅ Added logout parameter
+) {
     var showMenu by remember { mutableStateOf(false) }
-
-    val onLogout: () -> Unit = {
-        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-        prefs.edit().clear().apply()
-        navController.navigate("login") {
-            popUpTo("login") { inclusive = true }
-        }
-    }
 
     Column(
         modifier = Modifier
@@ -72,7 +64,7 @@ fun HomeScreen(navController: NavController) {
                     text = { Text("Logout") },
                     onClick = {
                         showMenu = false
-                        onLogout()
+                        onLogout()  // ✅ Call the logout function passed from MainActivity
                     }
                 )
             }
@@ -116,5 +108,8 @@ fun HomeScreen(navController: NavController) {
 @Composable
 fun HomeScreenPreview() {
     val navController = rememberNavController()
-    HomeScreen(navController = navController)
+    HomeScreen(
+        navController = navController,
+        onLogout = {}  // ✅ Empty lambda for preview
+    )
 }

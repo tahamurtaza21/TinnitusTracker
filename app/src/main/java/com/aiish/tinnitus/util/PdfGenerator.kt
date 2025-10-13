@@ -24,7 +24,7 @@ import java.io.FileOutputStream
 fun openPdf(context: Context, file: File) {
     val uri: Uri = FileProvider.getUriForFile(
         context,
-        "${context.packageName}.provider", // <- must match your manifest
+        "${context.packageName}.provider",
         file
     )
 
@@ -43,13 +43,37 @@ fun generatePdf(
     report: WeeklyReport,
     patientName: String,
     userNote: String,
-    reportRange: String // 👈 weekly / monthly / since_signup
+    reportRange: String
 ): File {
     val reportLabel = when (reportRange) {
         "weekly" -> "Weekly"
         "monthly" -> "Monthly"
         "since_signup" -> "Full History"
         else -> "Report"
+    }
+
+    // ✅ FIXED: Always end on TODAY and go backwards
+    val df = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+    val today = java.util.Calendar.getInstance()
+    val endIso = df.format(today.time) // TODAY
+
+    val startCal = java.util.Calendar.getInstance()
+    val startIso: String = when (reportRange) {
+        "weekly" -> {
+            startCal.add(java.util.Calendar.DAY_OF_YEAR, -6) // 7 days ending today
+            df.format(startCal.time)
+        }
+        "monthly" -> {
+            startCal.add(java.util.Calendar.DAY_OF_YEAR, -29) // 30 days ending today
+            df.format(startCal.time)
+        }
+        "since_signup" -> {
+            getStartDate() // user's signup date
+        }
+        else -> {
+            startCal.add(java.util.Calendar.DAY_OF_YEAR, -6)
+            df.format(startCal.time)
+        }
     }
 
     val fileName = "Tinnitus_${reportLabel}_Report.pdf"
@@ -61,31 +85,26 @@ fun generatePdf(
     val pdfDoc = PdfDocument(writer)
     val document = Document(pdfDoc)
 
-    val startDate = getStartDate()
-    val endDate = java.text.SimpleDateFormat("yyyy-MM-dd").format(java.util.Date())
-
     // Title
-    val title = Paragraph("Tinnitus $reportLabel Report")
-        .setFontSize(20f)
-        .setBold()
-        .setMarginBottom(10f)
-    document.add(title)
+    document.add(
+        Paragraph("Tinnitus $reportLabel Report")
+            .setFontSize(20f)
+            .setBold()
+            .setMarginBottom(10f)
+    )
 
-    // Patient Name and Date Range
+    // Patient name + date range
     document.add(Paragraph("Patient: $patientName").setFontSize(13f).setBold())
     document.add(
-        Paragraph("Report Period: $startDate to $endDate")
+        Paragraph("Report Period: $startIso to $endIso")
             .setItalic()
             .setFontSize(12f)
             .setMarginBottom(15f)
     )
 
-    // Section Helper
     fun addSection(label: String, value: String) {
-        val labelText = Paragraph(label).setBold().setFontSize(13f)
-        val valueText = Paragraph(value).setFontSize(12f).setMarginBottom(10f)
-        document.add(labelText)
-        document.add(valueText)
+        document.add(Paragraph(label).setBold().setFontSize(13f))
+        document.add(Paragraph(value).setFontSize(12f).setMarginBottom(10f))
     }
 
     val totalDays = report.tinnitusLevels.size
@@ -94,58 +113,62 @@ fun generatePdf(
     val soundPercent =
         if (totalDays > 0) report.soundTherapyDays.toDouble() * 100 / totalDays else 0.0
 
-    val relaxStr =
+    addSection(
+        "Relaxation Exercises Done",
         String.format("%.1f%% (%d/%d days)", relaxPercent, report.relaxationDays, totalDays)
-    val soundStr =
+    )
+    addSection(
+        "Sound Therapy Used",
         String.format("%.1f%% (%d/%d days)", soundPercent, report.soundTherapyDays, totalDays)
+    )
 
-    addSection("Relaxation Exercises Done", relaxStr)
-    addSection("Sound Therapy Used", soundStr)
-
-    // ✅ Insert Graph Images with proper rangeType
+    // Charts
     val tinnitusChart = createLineChart(
-        context,
+        context = context,
         label = "Tinnitus",
         values = report.tinnitusLevels,
-        rangeType = reportRange
+        rangeType = reportRange,
+        startDateIso = startIso,
+        endDateIso = endIso
     )
-    val tinnitusGraph: Bitmap = captureLineChartAsBitmap(tinnitusChart)
-    val tinnitusStream = ByteArrayOutputStream()
-    tinnitusGraph.compress(Bitmap.CompressFormat.PNG, 100, tinnitusStream)
-    val tinnitusImage = Image(ImageDataFactory.create(tinnitusStream.toByteArray()))
-    tinnitusImage.setAutoScale(true)
+    val tinnitusBmp: Bitmap = captureLineChartAsBitmap(tinnitusChart)
+    val tinStream = ByteArrayOutputStream()
+    tinnitusBmp.compress(Bitmap.CompressFormat.PNG, 100, tinStream)
     document.add(Paragraph("Tinnitus Level Trend").setBold().setMarginTop(10f))
-    document.add(tinnitusImage)
+    document.add(Image(ImageDataFactory.create(tinStream.toByteArray())).apply { setAutoScale(true) })
 
-    val tinnitusAvg = String.format("%.2f", report.tinnitusLevels.filterNotNull().average())
+    val tinnitusAvg = report.tinnitusLevels.filterNotNull().average().let {
+        if (it.isNaN()) 0.0 else it
+    }
     document.add(
-        Paragraph("Average Tinnitus Level: $tinnitusAvg")
+        Paragraph("Average Tinnitus Level: ${String.format("%.2f", tinnitusAvg)}")
             .setFontSize(12f)
             .setMarginBottom(10f)
     )
 
     val anxietyChart = createLineChart(
-        context,
+        context = context,
         label = "Anxiety",
         values = report.anxietyLevels,
-        rangeType = reportRange
+        rangeType = reportRange,
+        startDateIso = startIso,
+        endDateIso = endIso
     )
-    val anxietyGraph: Bitmap = captureLineChartAsBitmap(anxietyChart)
-    val anxietyStream = ByteArrayOutputStream()
-    anxietyGraph.compress(Bitmap.CompressFormat.PNG, 100, anxietyStream)
-    val anxietyImage = Image(ImageDataFactory.create(anxietyStream.toByteArray()))
-    anxietyImage.setAutoScale(true)
+    val anxietyBmp: Bitmap = captureLineChartAsBitmap(anxietyChart)
+    val anxStream = ByteArrayOutputStream()
+    anxietyBmp.compress(Bitmap.CompressFormat.PNG, 100, anxStream)
     document.add(Paragraph("Anxiety Level Trend").setBold().setMarginTop(10f))
-    document.add(anxietyImage)
+    document.add(Image(ImageDataFactory.create(anxStream.toByteArray())).apply { setAutoScale(true) })
 
-    val anxietyAvg = String.format("%.2f", report.anxietyLevels.filterNotNull().average())
+    val anxietyAvg = report.anxietyLevels.filterNotNull().average().let {
+        if (it.isNaN()) 0.0 else it
+    }
     document.add(
-        Paragraph("Average Anxiety Level: $anxietyAvg")
+        Paragraph("Average Anxiety Level: ${String.format("%.2f", anxietyAvg)}")
             .setFontSize(12f)
             .setMarginBottom(10f)
     )
 
-    // Notes
     document.add(Paragraph("\nAdditional Notes:").setBold())
     document.add(
         Paragraph(userNote)
@@ -154,14 +177,14 @@ fun generatePdf(
             .setMarginBottom(20f)
     )
 
-    // Footer
-    val footer = Paragraph("Generated by Tinnitus App")
-        .setFontSize(10f)
-        .setItalic()
-        .setMarginTop(30f)
-        .setTextAlignment(TextAlignment.CENTER)
+    document.add(
+        Paragraph("Generated by Tinnitus App")
+            .setFontSize(10f)
+            .setItalic()
+            .setMarginTop(30f)
+            .setTextAlignment(TextAlignment.CENTER)
+    )
 
-    document.add(footer)
     document.close()
     return file
 }
@@ -194,10 +217,12 @@ fun sendPdfViaEmail(
         putExtra(Intent.EXTRA_TEXT, "Attached is the latest $label report.")
     }
 
-    val resInfoList = context.packageManager.queryIntentActivities(intent, 0)
-    for (resolveInfo in resInfoList) {
-        val packageName = resolveInfo.activityInfo.packageName
-        context.grantUriPermission(packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    context.packageManager.queryIntentActivities(intent, 0).forEach { ri ->
+        context.grantUriPermission(
+            ri.activityInfo.packageName,
+            uri,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION
+        )
     }
 
     context.startActivity(Intent.createChooser(intent, "Send report via email"))

@@ -29,18 +29,45 @@ fun createLineChart(
     val chart = LineChart(context)
     val lineData = LineData()
 
+    // ✅ If there's no data at all (weekly / monthly / since_signup), draw grey placeholders
+    if (values.isEmpty()) {
+        val (startIso, endIso) = computeRange(rangeType, startDateIso, endDateIso)
+        val (labels, expectedCount) = buildDateLabels(
+            startIso,
+            endIso,
+            weekly = (rangeType == "since_signup")
+        )
+
+        val placeholderData = LineDataSet(
+            (0 until expectedCount).map { Entry(it.toFloat(), 0f) },
+            ""
+        ).apply {
+            color = Color.TRANSPARENT
+            setDrawCircles(true)
+            setCircleColor(Color.LTGRAY)
+            circleRadius = 5f
+            setDrawValues(false)
+            setDrawHighlightIndicators(false)
+        }
+
+        lineData.addDataSet(placeholderData)
+        chart.data = lineData
+        setupChartBase(chart, labels, expectedCount)
+        return chart
+    }
+
     // ---- build contiguous segments for non-null values ----
     var current = mutableListOf<Entry>()
     values.forEachIndexed { i, v ->
         if (v != null) current.add(Entry(i.toFloat(), v.toFloat()))
         else if (current.isNotEmpty()) {
-            lineData.addDataSet(styledSet(current, "")) // no legend
+            lineData.addDataSet(styledSet(current, ""))
             current = mutableListOf()
         }
     }
     if (current.isNotEmpty()) lineData.addDataSet(styledSet(current, ""))
 
-    // ---- optional ghost markers for missing days ----
+    // ---- ghost grey dots for missing days ----
     values.forEachIndexed { i, v ->
         if (v == null) {
             val ghost = LineDataSet(listOf(Entry(i.toFloat(), 0f)), "").apply {
@@ -58,6 +85,21 @@ fun createLineChart(
     }
 
     chart.data = lineData
+    val (startIso, endIso) = computeRange(rangeType, startDateIso, endDateIso)
+    val (labels, expectedCount) = buildDateLabels(
+        startIso,
+        endIso,
+        weekly = (rangeType == "since_signup")
+    )
+
+    setupChartBase(chart, labels, expectedCount)
+    return chart
+}
+
+/**
+ * Apply common styling to all charts
+ */
+private fun setupChartBase(chart: LineChart, labels: List<String>, expectedCount: Int) {
     chart.description.isEnabled = false
     chart.setDrawGridBackground(false)
     chart.setBackgroundColor(Color.WHITE)
@@ -67,14 +109,6 @@ fun createLineChart(
     chart.axisLeft.valueFormatter = object : ValueFormatter() {
         override fun getFormattedValue(value: Float) = value.toInt().toString()
     }
-
-    // ---- build label range deterministically ----
-    val (startIso, endIso) = computeRange(rangeType, startDateIso, endDateIso)
-    val (labels, expectedCount) = buildDateLabels(
-        startIso,
-        endIso,
-        weekly = (rangeType == "since_signup")
-    )
 
     chart.xAxis.apply {
         position = XAxis.XAxisPosition.BOTTOM
@@ -88,25 +122,18 @@ fun createLineChart(
                 val i = value.toInt()
                 return if (i in labels.indices) labels[i] else ""
             }
-            override fun getPointLabel(entry: Entry?): String {
-                val i = entry?.x?.toInt() ?: return ""
-                return values.getOrNull(i)?.toString() ?: "N/A"
-            }
         }
     }
 
     chart.legend.isEnabled = false
     chart.setTouchEnabled(false)
 
-    // fixed size for bitmap export
     chart.layout(0, 0, 800, 400)
     chart.measure(
         View.MeasureSpec.makeMeasureSpec(800, View.MeasureSpec.EXACTLY),
         View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY)
     )
     chart.layout(0, 0, chart.measuredWidth, chart.measuredHeight)
-
-    return chart
 }
 
 private fun styledSet(entries: List<Entry>, label: String) =
@@ -131,30 +158,47 @@ private fun computeRange(
     endOverride: String?
 ): Pair<String, String> {
     val today = Calendar.getInstance()
-    val end = (endOverride?.let { DF_ISO.parse(it) } ?: today.time)
+    val DF_ISO = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
-    return when (rangeType) {
+    // ✅ FIXED: End date is always TODAY unless overridden
+    val endIso = endOverride ?: DF_ISO.format(today.time)
+
+    val startIso = when (rangeType) {
         "weekly" -> {
-            val c = Calendar.getInstance().apply { time = end; add(Calendar.DAY_OF_YEAR, -6) }
-            (startOverride ?: DF_ISO.format(c.time)) to DF_ISO.format(end)
+            if (startOverride != null) {
+                startOverride
+            } else {
+                val startCal = Calendar.getInstance()
+                startCal.add(Calendar.DAY_OF_YEAR, -6) // 7 days ending today
+                DF_ISO.format(startCal.time)
+            }
         }
         "monthly" -> {
-            val cStart = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) }
-            val cEnd = Calendar.getInstance().apply {
-                set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
+            if (startOverride != null) {
+                startOverride
+            } else {
+                val startCal = Calendar.getInstance()
+                startCal.add(Calendar.DAY_OF_YEAR, -29) // 30 days ending today
+                DF_ISO.format(startCal.time)
             }
-            (startOverride ?: DF_ISO.format(cStart.time)) to (endOverride ?: DF_ISO.format(cEnd.time))
         }
         "since_signup" -> {
-            val startIso = startOverride ?: DF_ISO.format(today.time)
-            startIso to (endOverride ?: DF_ISO.format(today.time))
+            startOverride ?: run {
+                val startCal = Calendar.getInstance()
+                startCal.add(Calendar.MONTH, -6)
+                DF_ISO.format(startCal.time)
+            }
         }
         else -> {
-            val c = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -(6)) }
-            DF_ISO.format(c.time) to DF_ISO.format(end)
+            val startCal = Calendar.getInstance()
+            startCal.add(Calendar.DAY_OF_YEAR, -6)
+            DF_ISO.format(startCal.time)
         }
     }
+
+    return startIso to endIso
 }
+
 
 private fun buildDateLabels(
     startIso: String,
@@ -168,11 +212,8 @@ private fun buildDateLabels(
     val c = start.clone() as Calendar
     while (!c.after(end)) {
         labels.add(DF_LABEL.format(c.time))
-        if (weekly) {
-            c.add(Calendar.WEEK_OF_YEAR, 1)
-        } else {
-            c.add(Calendar.DAY_OF_YEAR, 1)
-        }
+        if (weekly) c.add(Calendar.WEEK_OF_YEAR, 1)
+        else c.add(Calendar.DAY_OF_YEAR, 1)
     }
     return labels to labels.size
 }
