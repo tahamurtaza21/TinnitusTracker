@@ -1,7 +1,6 @@
 package com.aiish.tinnitus.ui.user
 
 import android.graphics.Bitmap
-import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -34,13 +33,10 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.aiish.tinnitus.captureLineChartAsBitmap
 import com.aiish.tinnitus.createLineChart
-import com.aiish.tinnitus.data.ReportExporter
 import com.aiish.tinnitus.data.ReportRepository
 import com.aiish.tinnitus.model.WeeklyReport
 import com.aiish.tinnitus.model.generateReport
-import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -197,31 +193,6 @@ fun ReportScreen(navController: NavController) {
             modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
         )
 
-        ReportExportButton(
-            isLoading = isLoading,
-            reportRange = reportRange,
-            report = report,
-            weeklySummaries = weeklySummaries,
-            patientName = patientName,
-            userNote = userNote,
-            onStatus = { msg ->
-                statusMessage = msg
-                if (msg.startsWith("✅")) {
-                    report?.let { r ->
-                        if (reportRange == "weekly") {
-                            val avg = (r.averageTinnitus + r.averageAnxiety) / 2.0
-                            suggestionMessage = if (avg >= 7) {
-                                "Your average weekly scores are high. Contact your audiologist for expert advice."
-                            } else if (avg <= 5) {
-                                "You're making progress. Continue practicing."
-                            } else ""
-                            showSuggestionPopup = suggestionMessage.isNotEmpty()
-                        }
-                    }
-                }
-            },
-            onLoading = { isLoading = it }
-        )
     }
 
     if (showSuggestionPopup) {
@@ -333,83 +304,4 @@ fun ReportCharts(tinnitusBitmap: Bitmap?, anxietyBitmap: Bitmap?) {
         Text(value, style = MaterialTheme.typography.bodyLarge)
     }
 }
-
-@Composable
-fun ReportExportButton(
-    isLoading: Boolean,
-    reportRange: String,
-    report: WeeklyReport?,
-    weeklySummaries: List<WeeklyReport>,
-    patientName: String,
-    userNote: String,
-    onStatus: (String) -> Unit,
-    onLoading: (Boolean) -> Unit
-) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    Button(
-        onClick = {
-            report?.let { r ->
-                scope.launch {
-                    onLoading(true); onStatus("")
-                    try {
-                        val db = FirebaseFirestore.getInstance()   // ✅ FIX
-
-                        // ✅ fetch all admins from Firestore
-                        val snapshot = db.collection("admins").get().await()
-                        val adminEmails = snapshot.documents.mapNotNull { it.getString("email") }
-
-                        // ✅ Debug: log and show which admins will receive the email
-                        Log.d("ReportExportButton", "Sending report to admins: $adminEmails")
-                        onStatus("📧 Sending to: ${adminEmails.joinToString(", ")}")
-
-                        val exporter = ReportExporter()
-
-//                         send report to every admin
-                         adminEmails.forEach { adminEmail ->
-                            val result = exporter.exportAndSendReport(
-                                context = context,
-                                report = r,
-                                tinnitusData = r.tinnitusLevels,
-                                anxietyData = r.anxietyLevels,
-                                patientName = patientName,
-                                userNote = userNote,
-                                doctorEmail = adminEmail,   // 👈 dynamic now
-                                reportRange = reportRange
-                            )
-                            result.fold(
-                                onSuccess = { onStatus("✅ Sent to $adminEmail") },
-                                onFailure = { onStatus("❌ Failed for $adminEmail: ${it.localizedMessage}") }
-                            )
-                        }
-//                        // ✅ only send to the first admin email (for testing)
-//                        val firstAdmin = adminEmails.firstOrNull()
-//                        if (firstAdmin != null) {
-//                            val result = exporter.exportAndSendReport(
-//                                context = context,
-//                                report = r,
-//                                tinnitusData = r.tinnitusLevels,
-//                                anxietyData = r.anxietyLevels,
-//                                patientName = patientName,
-//                                userNote = userNote,
-//                                doctorEmail = firstAdmin,
-//                                reportRange = reportRange
-//                            )
-//                            result.fold(
-//                                onSuccess = { onStatus("✅ Sent only to $firstAdmin (test mode)") },
-//                                onFailure = { onStatus("❌ Failed for $firstAdmin: ${it.localizedMessage}") }
-//                            )
-//                        } else {
-//                            onStatus("❌ No admins found in Firestore")
-//                        }
-                    } finally { onLoading(false) }
-                }
-            }
-        },
-        modifier = Modifier.fillMaxWidth(),
-        enabled = !isLoading
-    ) { Text("Send to Doctor") }
-}
-
 
