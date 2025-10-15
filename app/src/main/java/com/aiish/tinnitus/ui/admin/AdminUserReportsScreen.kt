@@ -1,6 +1,7 @@
 package com.aiish.tinnitus.ui.admin
 
 import android.content.Context
+import android.os.Environment
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,8 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.aiish.tinnitus.data.ReportRepository
 import com.aiish.tinnitus.model.generateReport
-import com.aiish.tinnitus.util.generatePdf
-import com.google.firebase.auth.FirebaseAuth
+import com.aiish.tinnitus.util.generatePdfWithChartData
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.storage.FirebaseStorage
@@ -44,40 +46,24 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.io.FileInputStream
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-data class ReportFile(
+data class ReportItem(
     val name: String,
-    val url: String
+    val url: String?,
+    val isGenerating: Boolean,
+    val reportRange: String
 )
 
 @Composable
 fun AdminUserReportsScreen(uid: String) {
-
-    LaunchedEffect(Unit) {
-        val currentUser = FirebaseAuth.getInstance().currentUser
-        android.util.Log.d("AdminDebug", "=== AUTH DEBUG ===")
-        android.util.Log.d("AdminDebug", "Current Auth UID: ${currentUser?.uid}")
-        android.util.Log.d("AdminDebug", "Current Auth Email: ${currentUser?.email}")
-        android.util.Log.d("AdminDebug", "Is Anonymous: ${currentUser?.isAnonymous}")
-
-        // Check if this UID exists in admins collection
-        try {
-            val db = FirebaseFirestore.getInstance()
-            val adminDoc = currentUser?.uid?.let { db.collection("admins").document(it).get().await() }
-            android.util.Log.d("AdminDebug", "Admin doc exists: ${adminDoc?.exists()}")
-            android.util.Log.d("AdminDebug", "Admin doc data: ${adminDoc?.data}")
-        } catch (e: Exception) {
-            android.util.Log.e("AdminDebug", "Error checking admin: ${e.message}")
-        }
-    }
-
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var reports by remember { mutableStateOf<List<ReportFile>>(emptyList()) }
+
+    var reports by remember { mutableStateOf<List<ReportItem>>(emptyList()) }
     var currentAdminEmail by remember { mutableStateOf<String?>(null) }
-    var isSending by remember { mutableStateOf(false) }
 
     // ✅ Get logged-in admin email
     LaunchedEffect(Unit) {
@@ -85,24 +71,160 @@ fun AdminUserReportsScreen(uid: String) {
         currentAdminEmail = prefs.getString("logged_in_email", null)
     }
 
-    // ✅ Fetch uploaded report files for the patient
+    // ✅ Generate all three reports on screen load
     LaunchedEffect(uid) {
-        val storageRef = FirebaseStorage.getInstance().reference
-        val userReportsRef = storageRef.child("reports").child(uid)
+        // Initialize with loading states
+        reports = listOf(
+            ReportItem("Weekly Report", null, true, "weekly"),
+            ReportItem("Monthly Report", null, true, "monthly"),
+            ReportItem("Full History Report", null, true, "since_signup")
+        )
 
-        userReportsRef.listAll()
-            .addOnSuccessListener { listResult ->
-                val tempList = mutableListOf<ReportFile>()
-                listResult.items.forEach { fileRef ->
-                    fileRef.downloadUrl.addOnSuccessListener { uri ->
-                        tempList.add(ReportFile(fileRef.name, uri.toString()))
-                        reports = tempList.toList()
+        scope.launch {
+            try {
+                val db = FirebaseFirestore.getInstance()
+                val userDoc = db.collection("users").document(uid).get().await()
+                val patientName = userDoc.getString("name") ?: "Patient"
+                val patientEmail = userDoc.getString("email") ?: ""
+
+                val repository = ReportRepository()
+                val allCheckIns = repository.fetchCheckIns(patientEmail)
+
+                val df = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                val today = df.format(Date())
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+
+                val reportTypes = listOf(
+                    Triple("weekly", "Weekly", "Weekly Report"),
+                    Triple("monthly", "Monthly", "Monthly Report"),
+                    Triple("since_signup", "Full", "Full History Report")
+                )
+
+                val generatedReports = mutableListOf<ReportItem>()
+
+                reportTypes.forEach { (range, label, displayName) ->
+                    try {
+                        // ✅ EXACTLY match ReportScreen.kt logic
+                        val filtered = repository.filterByRange(allCheckIns, range, today)
+
+                        // ✅ PAD weekly data just like ReportScreen does!
+                        val finalCheckIns = if (range == "weekly") {
+                            repository.padWeeklyData(filtered, patientEmail)
+                        } else {
+                            filtered
+                        }
+
+                        val sorted = finalCheckIns.sortedBy { it.date }
+                        val reportData = generateReport(sorted)
+
+                        // ✅ Build the SAME padded series that ReportScreen uses for charts
+                        val (startIso, endIso) = when (range) {
+                            "weekly" -> {
+                                val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -6) }
+                                SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time) to today
+                            }
+                            "monthly" -> {
+                                val cStart = Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) }
+                                val cEnd = Calendar.getInstance().apply {
+                                    set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
+                                }
+                                val df = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                                df.format(cStart.time) to df.format(cEnd.time)
+                            }
+                            "since_signup" -> {
+                                val start = sorted.firstOrNull()?.date ?: today
+                                start to today
+                            }
+                            else -> today to today
+                        }
+
+                        val df = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                        val byDate = sorted.associateBy { it.date }
+
+                        // Build padded series with nulls for missing days
+                        val tSeries: List<Int?>
+                        val aSeries: List<Int?>
+
+                        if (range == "since_signup") {
+                            // group by ISO week and take averages
+                            val grouped = sorted.groupBy { ci ->
+                                val cal = Calendar.getInstance().apply { time = df.parse(ci.date)!! }
+                                "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.WEEK_OF_YEAR)}"
+                            }
+                            tSeries = grouped.values.map { week ->
+                                week.mapNotNull { it.tinnitusLevel }.average().takeIf { !it.isNaN() }?.toInt()
+                            }
+                            aSeries = grouped.values.map { week ->
+                                week.mapNotNull { it.anxietyLevel }.average().takeIf { !it.isNaN() }?.toInt()
+                            }
+                        } else {
+                            // For weekly and monthly: pad all days in range
+                            val tmpT = mutableListOf<Int?>()
+                            val tmpA = mutableListOf<Int?>()
+                            val c = Calendar.getInstance().apply { time = df.parse(startIso)!! }
+                            val end = Calendar.getInstance().apply { time = df.parse(endIso)!! }
+                            while (!c.after(end)) {
+                                val d = df.format(c.time)
+                                val ci = byDate[d]
+                                tmpT.add(ci?.tinnitusLevel)
+                                tmpA.add(ci?.anxietyLevel)
+                                c.add(Calendar.DAY_OF_YEAR, 1)
+                            }
+                            tSeries = tmpT
+                            aSeries = tmpA
+                        }
+
+                        // ✅ Generate PDF with padded chart data
+                        val pdfFile = generatePdfWithChartData(
+                            context = context,
+                            report = reportData,
+                            tinnitusData = tSeries,
+                            anxietyData = aSeries,
+                            patientName = patientName,
+                            userNote = "Generated on ${SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())}",
+                            reportRange = range,
+                            startDateIso = startIso,
+                            endDateIso = endIso
+                        )
+
+                        // Upload to Firebase Storage
+                        val fileName = "Tinnitus_${label}_${timestamp}.pdf"
+                        val storageRef = FirebaseStorage.getInstance().reference
+                            .child("reports")
+                            .child(uid)
+                            .child(fileName)
+
+                        FileInputStream(pdfFile).use { stream ->
+                            storageRef.putStream(stream).await()
+                        }
+
+                        val downloadUrl = storageRef.downloadUrl.await().toString()
+
+                        generatedReports.add(
+                            ReportItem(displayName, downloadUrl, false, range)
+                        )
+
+                        // Update UI progressively
+                        reports = generatedReports + reportTypes.drop(generatedReports.size).map { (r, _, n) ->
+                            ReportItem(n, null, true, r)
+                        }
+
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                        generatedReports.add(
+                            ReportItem("$displayName (Failed)", null, false, range)
+                        )
                     }
                 }
+
+                reports = generatedReports
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(context, "Failed to generate reports: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                reports = reports.map { it.copy(isGenerating = false, name = "${it.name} (Failed)") }
             }
-            .addOnFailureListener {
-                Toast.makeText(context, "❌ Failed to load reports.", Toast.LENGTH_SHORT).show()
-            }
+        }
     }
 
     // ✅ UI
@@ -111,27 +233,47 @@ fun AdminUserReportsScreen(uid: String) {
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        Text("Reports", style = MaterialTheme.typography.headlineMedium)
+        Text("Patient Reports", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(16.dp))
 
-        if (reports.isEmpty()) {
-            Text("No reports found.", style = MaterialTheme.typography.bodyMedium)
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(reports) { report ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(reports) { report ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (report.isGenerating)
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        else
+                            MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        if (report.isGenerating) {
+                            // Show loading indicator
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(Modifier.size(12.dp))
+                                Text(
+                                    text = "Generating ${report.name}...",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else if (report.url != null) {
                             // 📄 Clicking name opens PDF
                             Text(
                                 text = "📄 ${report.name}",
@@ -147,7 +289,9 @@ fun AdminUserReportsScreen(uid: String) {
                                     }
                             )
 
-                            // ✉️ Generate FRESH PDF and send
+                            // ✉️ Send button
+                            var isSending by remember { mutableStateOf(false) }
+
                             IconButton(
                                 onClick = {
                                     val email = currentAdminEmail
@@ -159,64 +303,19 @@ fun AdminUserReportsScreen(uid: String) {
                                     scope.launch {
                                         try {
                                             isSending = true
-                                            Toast.makeText(context, "🔄 Generating fresh report...", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "📤 Sending report...", Toast.LENGTH_SHORT).show()
 
                                             val db = FirebaseFirestore.getInstance()
                                             val userDoc = db.collection("users").document(uid).get().await()
                                             val patientName = userDoc.getString("name") ?: "Patient"
-                                            val patientEmail = userDoc.getString("email") ?: ""
-
-                                            // Determine report range from filename
-                                            val reportRange = when {
-                                                report.name.contains("Weekly", ignoreCase = true) -> "weekly"
-                                                report.name.contains("Monthly", ignoreCase = true) -> "monthly"
-                                                report.name.contains("Full", ignoreCase = true) -> "since_signup"
-                                                else -> "weekly"
-                                            }
-
-                                            // ✅ FETCH FRESH DATA from Firestore
-                                            val repository = ReportRepository()
-                                            val allCheckIns = repository.fetchCheckIns(patientEmail)
-
-                                            val df = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                                            val today = df.format(Date())
-
-                                            // Filter check-ins based on range
-                                            val filteredCheckIns = repository.filterByRange(allCheckIns, reportRange, today)
-
-                                            // Generate report data
-                                            val reportData = generateReport(filteredCheckIns)
-
-                                            // ✅ GENERATE FRESH PDF with TODAY's date ranges
-                                            val pdfFile = generatePdf(
-                                                context = context,
-                                                report = reportData,
-                                                patientName = patientName,
-                                                userNote = "Generated on ${SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(Date())}",
-                                                reportRange = reportRange
-                                            )
-
-                                            // Upload fresh PDF to Storage with timestamp
-                                            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                                            val newFileName = "Tinnitus_${reportRange}_${timestamp}.pdf"
-                                            val storageRef = FirebaseStorage.getInstance().reference
-                                                .child("reports")
-                                                .child(uid)
-                                                .child(newFileName)
-
-                                            FileInputStream(pdfFile).use { stream ->
-                                                storageRef.putStream(stream).await()
-                                            }
-
-                                            val downloadUrl = storageRef.downloadUrl.await().toString()
 
                                             // Send email via Cloud Function
                                             val data = hashMapOf(
                                                 "email" to email,
-                                                "fileUrl" to downloadUrl,
-                                                "fileName" to newFileName,
+                                                "fileUrl" to report.url,
+                                                "fileName" to report.name,
                                                 "patientName" to patientName,
-                                                "reportRange" to reportRange
+                                                "reportRange" to report.reportRange
                                             )
 
                                             FirebaseFunctions.getInstance()
@@ -224,7 +323,7 @@ fun AdminUserReportsScreen(uid: String) {
                                                 .call(data)
                                                 .await()
 
-                                            Toast.makeText(context, "✅ Fresh report sent to $email", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "✅ Report sent to $email", Toast.LENGTH_SHORT).show()
                                         } catch (e: Exception) {
                                             Toast.makeText(context, "❌ ${e.localizedMessage}", Toast.LENGTH_LONG).show()
                                             e.printStackTrace()
@@ -235,12 +334,26 @@ fun AdminUserReportsScreen(uid: String) {
                                 },
                                 enabled = !isSending
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Send,
-                                    contentDescription = "Send Fresh Report",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
+                                if (isSending) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Send,
+                                        contentDescription = "Send Report",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
+                        } else {
+                            // Failed state
+                            Text(
+                                text = "❌ ${report.name}",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.error
+                            )
                         }
                     }
                 }
