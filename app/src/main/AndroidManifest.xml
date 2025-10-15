@@ -3,8 +3,16 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.aiish.tinnitus">
 
+    <!-- Existing permissions -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- ✅ New permissions for reliable notifications -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:name="com.aiish.tinnitus.TinnitusApp"
@@ -38,6 +46,24 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- ✅ Boot Receiver: Reschedules notifications after device reboot -->
+        <receiver
+            android:name=".notifications.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ✅ Alarm Receiver: Handles exact alarm notifications -->
+        <receiver
+            android:name=".notifications.AlarmReceiver"
+            android:enabled="true"
+            android:exported="false" />
 
     </application>
 
