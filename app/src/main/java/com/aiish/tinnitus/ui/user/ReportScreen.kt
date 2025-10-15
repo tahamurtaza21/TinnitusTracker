@@ -16,7 +16,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -183,15 +182,6 @@ fun ReportScreen(navController: NavController) {
                 weeklySummaries = weeklySummaries
             )
         }
-
-        Spacer(Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = userNote,
-            onValueChange = { userNote = it },
-            label = { Text("Optional Notes for Report") },
-            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
-        )
 
     }
 
