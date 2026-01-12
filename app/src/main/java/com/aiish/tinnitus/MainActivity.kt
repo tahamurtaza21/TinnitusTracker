@@ -162,15 +162,19 @@ class MainActivity : ComponentActivity() {
                             isOnLoginScreen = false
                         }
 
-                        // ✅ Handle back button to EXIT APP (not logout)
+                        // ✅ Handle back button to sign out
                         androidx.activity.compose.BackHandler {
-                            finishAffinity()  // ← JUST EXIT, DON'T SIGN OUT!
+                            FirebaseAuth.getInstance().signOut()
+                            finishAffinity()
+                            val intent = packageManager.getLaunchIntentForPackage(packageName)
+                            intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                            intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            startActivity(intent)
                         }
 
                         AdminDashboardScreen(
                             navController = navController,
                             onLogout = {
-                                // Only the logout button should sign out
                                 FirebaseAuth.getInstance().signOut()
                                 finishAffinity()
                                 val intent = packageManager.getLaunchIntentForPackage(packageName)
