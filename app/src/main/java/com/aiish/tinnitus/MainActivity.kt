@@ -1,7 +1,13 @@
 package com.aiish.tinnitus
 
+import android.Manifest
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.LaunchedEffect
@@ -9,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -30,7 +37,6 @@ class MainActivity : ComponentActivity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (isOnLoginScreen) {
-            // ✅ Exit app when on login screen - use finishAffinity to clear everything
             finishAffinity()
         } else {
             @Suppress("DEPRECATION")
@@ -39,21 +45,21 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(null)  // ✅ Pass null to prevent state restoration
+        super.onCreate(null)
         enableEdgeToEdge()
 
+        requestNotificationPermissionIfNeeded()
+        requestNotificationPermissionIfNeeded()
+        requestBatteryOptimizationExemption()  // Add this
+
+
         setContent {
-            // ✅ Check auth state and role dynamically
             var startDestination by remember { mutableStateOf<String?>(null) }
-            val currentUser = FirebaseAuth.getInstance().currentUser
 
             LaunchedEffect(Unit) {
-                // ✅ ALWAYS start at login to avoid back stack issues
-                // The login screen will immediately navigate if user is already logged in
                 startDestination = "login"
             }
 
-            // ✅ Wait until we determine the start destination
             if (startDestination != null) {
                 val navController = rememberNavController()
 
@@ -61,12 +67,11 @@ class MainActivity : ComponentActivity() {
                     navController = navController,
                     startDestination = startDestination!!
                 ) {
+
                     composable("login") {
-                        // ✅ Track that we're on login screen
                         LaunchedEffect(Unit) {
                             isOnLoginScreen = true
 
-                            // ✅ Auto-navigate if already logged in
                             val currentUser = FirebaseAuth.getInstance().currentUser
                             if (currentUser != null) {
                                 try {
@@ -85,14 +90,14 @@ class MainActivity : ComponentActivity() {
                                             popUpTo(0) { inclusive = true }
                                         }
                                     }
-                                } catch (e: Exception) {
-                                    // Stay on login if error
+                                } catch (_: Exception) {
                                 }
                             }
                         }
 
                         LoginScreen(
                             onLoginSuccess = {
+                                scheduleDailyCheckInReminder(this@MainActivity)
                                 isOnLoginScreen = false
                                 navController.navigate("home") {
                                     popUpTo(0) { inclusive = true }
@@ -112,9 +117,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     composable("signup") {
-                        LaunchedEffect(Unit) {
-                            isOnLoginScreen = false
-                        }
+                        isOnLoginScreen = false
                         SignUpScreen(
                             onSignUpSuccess = { navController.navigate("login") },
                             onNavigateToLogin = { navController.navigate("login") }
@@ -122,54 +125,38 @@ class MainActivity : ComponentActivity() {
                     }
 
                     composable("home") {
-                        LaunchedEffect(Unit) {
-                            isOnLoginScreen = false
-                        }
-
+                        isOnLoginScreen = false
                         HomeScreen(
                             navController = navController,
                             onLogout = {
-                                android.util.Log.d("MainActivity", "Logout clicked - current user: ${FirebaseAuth.getInstance().currentUser?.email}")
                                 FirebaseAuth.getInstance().signOut()
-                                android.util.Log.d("MainActivity", "After signout - current user: ${FirebaseAuth.getInstance().currentUser}")
-
-                                // ✅ Kill everything and restart fresh
                                 finishAffinity()
-                                val intent = packageManager.getLaunchIntentForPackage(packageName)
-                                intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                                intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                startActivity(intent)
+                                startActivity(
+                                    packageManager.getLaunchIntentForPackage(packageName)
+                                )
                             }
                         )
                     }
 
                     composable("checkin") {
-                        LaunchedEffect(Unit) {
-                            isOnLoginScreen = false
-                        }
-                        CheckInScreen(navController = navController)
+                        isOnLoginScreen = false
+                        CheckInScreen(navController)
                     }
 
                     composable("report") {
-                        LaunchedEffect(Unit) {
-                            isOnLoginScreen = false
-                        }
-                        ReportScreen(navController = navController)
+                        isOnLoginScreen = false
+                        ReportScreen(navController)
                     }
 
                     composable("admin_dashboard") {
-                        LaunchedEffect(Unit) {
-                            isOnLoginScreen = false
-                        }
+                        isOnLoginScreen = false
 
-                        // ✅ Handle back button to sign out
-                        androidx.activity.compose.BackHandler {
+                        BackHandler {
                             FirebaseAuth.getInstance().signOut()
                             finishAffinity()
-                            val intent = packageManager.getLaunchIntentForPackage(packageName)
-                            intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                            intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                            startActivity(intent)
+                            startActivity(
+                                packageManager.getLaunchIntentForPackage(packageName)
+                            )
                         }
 
                         AdminDashboardScreen(
@@ -177,22 +164,47 @@ class MainActivity : ComponentActivity() {
                             onLogout = {
                                 FirebaseAuth.getInstance().signOut()
                                 finishAffinity()
-                                val intent = packageManager.getLaunchIntentForPackage(packageName)
-                                intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                                intent?.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                                startActivity(intent)
+                                startActivity(
+                                    packageManager.getLaunchIntentForPackage(packageName)
+                                )
                             }
                         )
                     }
 
                     composable("admin_user_reports/{uid}") { backStackEntry ->
-                        LaunchedEffect(Unit) {
-                            isOnLoginScreen = false
-                        }
                         val uid = backStackEntry.arguments?.getString("uid") ?: ""
-                        AdminUserReportsScreen(uid = uid)
+                        AdminUserReportsScreen(uid)
                     }
                 }
+            }
+        }
+    }
+
+    private fun requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestPermissions(
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    1001
+                )
+            }
+        }
+    }
+
+    private fun requestBatteryOptimizationExemption() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val intent = Intent()
+            val packageName = packageName
+            val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                intent.action = android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                intent.data = android.net.Uri.parse("package:$packageName")
+                startActivity(intent)
             }
         }
     }

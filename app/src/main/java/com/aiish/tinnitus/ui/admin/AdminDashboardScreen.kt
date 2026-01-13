@@ -43,7 +43,7 @@ data class User(
 @Composable
 fun AdminDashboardScreen(
     navController: NavController,
-    onLogout: () -> Unit  // ✅ Added logout parameter
+    onLogout: () -> Unit
 ) {
     val scope = rememberCoroutineScope()
     var users by remember { mutableStateOf<List<User>>(emptyList()) }
@@ -53,11 +53,26 @@ fun AdminDashboardScreen(
         scope.launch {
             val db = FirebaseFirestore.getInstance()
             val snapshot = db.collection("users").get().await()
-            users = snapshot.documents.map { doc ->
-                User(
-                    uid = doc.id,
-                    name = doc.getString("name") ?: ""
-                )
+
+            // ✅ Filter out ALL admin users by checking custom claims
+            users = buildList {
+                for (doc in snapshot.documents) {
+                    val uid = doc.id
+                    val name = doc.getString("name") ?: ""
+
+                    // Check if this user is an admin by checking if they exist in "admins" collection
+                    val isAdmin = try {
+                        val adminDoc = db.collection("admins").document(uid).get().await()
+                        adminDoc.exists()
+                    } catch (e: Exception) {
+                        false
+                    }
+
+                    // Only add non-admin users
+                    if (!isAdmin) {
+                        add(User(uid = uid, name = name))
+                    }
+                }
             }
         }
     }

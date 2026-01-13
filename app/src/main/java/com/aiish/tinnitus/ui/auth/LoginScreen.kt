@@ -35,10 +35,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import com.aiish.tinnitus.data.AuthRepository
-import com.aiish.tinnitus.notifications.CheckInReminderWorker
 import com.aiish.tinnitus.notifications.scheduleDailyCheckInReminder
 import com.aiish.tinnitus.util.LoginValidator
 import com.aiish.tinnitus.util.requestIgnoreBatteryOptimization
@@ -124,8 +121,6 @@ fun LoginScreen(
         ) { isGranted ->
             if (isGranted) {
                 scheduleDailyCheckInReminder(context)
-                val nowWork = OneTimeWorkRequestBuilder<CheckInReminderWorker>().build()
-                WorkManager.getInstance(context).enqueue(nowWork)
             } else {
                 Toast.makeText(context, "Notification permission denied", Toast.LENGTH_SHORT).show()
             }
@@ -163,13 +158,9 @@ fun LoginScreen(
                                         permissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                                     } else {
                                         scheduleDailyCheckInReminder(context)
-                                        val nowWork = OneTimeWorkRequestBuilder<CheckInReminderWorker>().build()
-                                        WorkManager.getInstance(context).enqueue(nowWork)
                                     }
                                 } else {
                                     scheduleDailyCheckInReminder(context)
-                                    val nowWork = OneTimeWorkRequestBuilder<CheckInReminderWorker>().build()
-                                    WorkManager.getInstance(context).enqueue(nowWork)
                                 }
                             }
 
