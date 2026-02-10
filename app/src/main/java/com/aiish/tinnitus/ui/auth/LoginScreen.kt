@@ -45,7 +45,8 @@ import kotlinx.coroutines.launch
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onAdminLoginSuccess: () -> Unit,
-    onNavigateToSignUp: () -> Unit
+    onNavigateToSignUp: () -> Unit,
+    onNavigateToForgotPassword: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -186,7 +187,7 @@ fun LoginScreen(
 
 
         TextButton(
-            onClick = { /* forgot password logic */ },
+            onClick = onNavigateToForgotPassword,
             modifier = Modifier.padding(top = 8.dp)
         ) {
             Text("Forgot Password?")

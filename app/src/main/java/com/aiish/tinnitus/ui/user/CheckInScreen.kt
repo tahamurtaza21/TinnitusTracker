@@ -173,6 +173,13 @@ fun LevelSlider(title: String, value: Int, onChange: (Int) -> Unit) {
         valueRange = 1f..10f,
         steps = 8
     )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text("1 (Lowest)", style = MaterialTheme.typography.bodySmall)
+        Text("10 (Highest)", style = MaterialTheme.typography.bodySmall)
+    }
 }
 
 @Composable

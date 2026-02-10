@@ -22,6 +22,7 @@ import androidx.navigation.compose.rememberNavController
 import com.aiish.tinnitus.notifications.scheduleDailyCheckInReminder
 import com.aiish.tinnitus.ui.admin.AdminDashboardScreen
 import com.aiish.tinnitus.ui.admin.AdminUserReportsScreen
+import com.aiish.tinnitus.ui.auth.ForgotPasswordScreen
 import com.aiish.tinnitus.ui.auth.LoginScreen
 import com.aiish.tinnitus.ui.auth.SignUpScreen
 import com.aiish.tinnitus.ui.user.CheckInScreen
@@ -112,6 +113,19 @@ class MainActivity : ComponentActivity() {
                             onNavigateToSignUp = {
                                 isOnLoginScreen = false
                                 navController.navigate("signup")
+                            },
+                            onNavigateToForgotPassword = {
+                                isOnLoginScreen = false
+                                navController.navigate("forgot_password")
+                            }
+                        )
+                    }
+
+                    composable("forgot_password") {
+                        isOnLoginScreen = false
+                        ForgotPasswordScreen(
+                            onBackToLogin = {
+                                navController.popBackStack()
                             }
                         )
                     }

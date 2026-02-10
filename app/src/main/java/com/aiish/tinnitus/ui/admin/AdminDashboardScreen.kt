@@ -54,13 +54,13 @@ fun AdminDashboardScreen(
             val db = FirebaseFirestore.getInstance()
             val snapshot = db.collection("users").get().await()
 
-            // ✅ Filter out ALL admin users by checking custom claims
-            users = buildList {
+            // ✅ Filter out ALL admin users
+            val allUsers = buildList {
                 for (doc in snapshot.documents) {
                     val uid = doc.id
                     val name = doc.getString("name") ?: ""
 
-                    // Check if this user is an admin by checking if they exist in "admins" collection
+                    // Check if this user is an admin
                     val isAdmin = try {
                         val adminDoc = db.collection("admins").document(uid).get().await()
                         adminDoc.exists()
@@ -74,6 +74,11 @@ fun AdminDashboardScreen(
                     }
                 }
             }
+
+            // ✅ Remove duplicates by normalizing names (case-insensitive)
+            users = allUsers
+                .groupBy { it.name.trim().lowercase() }
+                .map { (_, usersWithSameName) -> usersWithSameName.first() }
         }
     }
 
