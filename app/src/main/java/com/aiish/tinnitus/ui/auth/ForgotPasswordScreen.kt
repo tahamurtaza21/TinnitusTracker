@@ -57,6 +57,13 @@ fun ForgotPasswordScreen(onBackToLogin: () -> Unit) {
         Text(
             text = "Enter your email address and we'll send you a link to reset your password.",
             style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        Text(
+            text = "Check your spam folder if you don't see the email.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 32.dp)
         )
 
@@ -72,7 +79,8 @@ fun ForgotPasswordScreen(onBackToLogin: () -> Unit) {
             errorMessage = "Please enter a valid email address",
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Email,
-                imeAction = ImeAction.Done
+                imeAction = ImeAction.Done,
+                autoCorrect = false
             )
         )
 
@@ -96,22 +104,22 @@ fun ForgotPasswordScreen(onBackToLogin: () -> Unit) {
                             auth.sendPasswordResetEmail(email).await()
                             Toast.makeText(
                                 context,
-                                "Password reset email sent! Check your inbox.",
+                                "If an account exists with this email, you'll receive a password reset link.",
                                 Toast.LENGTH_LONG
                             ).show()
                             onBackToLogin()
                         } catch (e: Exception) {
                             errorMessage = when {
-                                e.message?.contains("no user record", ignoreCase = true) == true ->
-                                    "No account found with this email address"
                                 e.message?.contains("network", ignoreCase = true) == true ->
                                     "Network error. Please check your connection"
-                                else -> "Failed to send reset email: ${e.message}"
+                                else -> "Failed to send reset email. Please try again."
                             }
                         } finally {
                             isLoading = false
                         }
                     }
+                } else if (email.isEmpty()) {
+                    errorMessage = "Please enter your email address"
                 }
             },
             modifier = Modifier
