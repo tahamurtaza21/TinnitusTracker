@@ -105,6 +105,7 @@ private fun setupChartBase(chart: LineChart, labels: List<String>, expectedCount
     chart.setBackgroundColor(Color.WHITE)
     chart.axisRight.isEnabled = false
     chart.axisLeft.axisMinimum = 0f
+    chart.axisLeft.axisMaximum = 10f
     chart.axisLeft.granularity = 1f
     chart.axisLeft.valueFormatter = object : ValueFormatter() {
         override fun getFormattedValue(value: Float) = value.toInt().toString()

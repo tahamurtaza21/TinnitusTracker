@@ -184,18 +184,18 @@ fun CheckInScreen(navController: NavController) {
         Button(onClick = submitCheckIn, modifier = Modifier.fillMaxWidth()) {
             Text(if (uiState.isUpdating) "Update Check-In" else "Submit")
         }
+    }
 
-        if (showRecommendationPopup) {
-            RecommendationDialog(
-                message = popupMessage,
-                onDismiss = {
-                    showRecommendationPopup = false
-                    Toast.makeText(context, "Check-in submitted!", Toast.LENGTH_SHORT).show()
-                    navController.popBackStack()
-                },
-                onUpdate = { showRecommendationPopup = false }
-            )
-        }
+    if (showRecommendationPopup) {
+        RecommendationDialog(
+            message = popupMessage,
+            onDismiss = {
+                showRecommendationPopup = false
+                Toast.makeText(context, "Check-in submitted!", Toast.LENGTH_SHORT).show()
+                navController.popBackStack()
+            },
+            onUpdate = { showRecommendationPopup = false }
+        )
     }
 }
 
