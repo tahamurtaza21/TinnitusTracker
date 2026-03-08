@@ -5,5 +5,6 @@ data class LoginUiState(
     var password: String = "",
     var emailError: Boolean = false,
     var passwordError: Boolean = false,
-    var loginError: String = ""
+    var loginError: String = "",
+    var isLoading: Boolean = false
 )

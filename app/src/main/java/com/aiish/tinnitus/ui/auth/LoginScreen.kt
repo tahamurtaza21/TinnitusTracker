@@ -16,7 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -136,6 +138,7 @@ fun LoginScreen(
 
                 if (!uiState.emailError && !uiState.passwordError) {
                     scope.launch {
+                        uiState = uiState.copy(isLoading = true)
                         val result = repo.loginUser(context, uiState.email, uiState.password)
                         result.onSuccess { (email, role) ->
                             Toast.makeText(context, "Login successful!", Toast.LENGTH_SHORT).show()
@@ -175,14 +178,24 @@ fun LoginScreen(
                         }.onFailure { e ->
                             uiState = uiState.copy(loginError = "Login failed: ${e.message}")
                         }
+                        uiState = uiState.copy(isLoading = false)
                     }
                 }
             },
+            enabled = !uiState.isLoading,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp)
         ) {
-            Text("LOG IN")
+            if (uiState.isLoading) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(20.dp)
+                )
+            } else {
+                Text("LOG IN")
+            }
         }
 
 

@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -55,6 +57,7 @@ fun SignUpScreen(
     val repo = AuthRepository()
 
     var uiState by remember { mutableStateOf(SignUpUiState()) }
+    var isLoading by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -138,6 +141,7 @@ fun SignUpScreen(
         )
 
         Button(
+            enabled = !isLoading,
             onClick = {
                 uiState = uiState.copy(
                     nameError = uiState.name.isEmpty(),
@@ -153,6 +157,7 @@ fun SignUpScreen(
                     !uiState.passwordError && !uiState.confirmPasswordError
                 ) {
                     scope.launch {
+                        isLoading = true
                         val result = repo.signUpUser(context, uiState.email, uiState.password)
                         result.onSuccess {
                             // Save role as "user" by default
@@ -168,6 +173,7 @@ fun SignUpScreen(
                         }.onFailure { e ->
                             Toast.makeText(context, "Sign up failed: ${e.message}", Toast.LENGTH_LONG).show()
                         }
+                        isLoading = false
                     }
                 }
             },
@@ -175,7 +181,15 @@ fun SignUpScreen(
                 .fillMaxWidth()
                 .height(50.dp)
         ) {
-            Text("SIGN UP")
+            if (isLoading) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(20.dp)
+                )
+            } else {
+                Text("SIGN UP")
+            }
         }
 
         Row(
