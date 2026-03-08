@@ -10,8 +10,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
@@ -25,8 +33,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavController
 import com.aiish.tinnitus.data.CheckInRepository
 import kotlinx.coroutines.Dispatchers
@@ -104,37 +113,71 @@ fun CheckInScreen(navController: NavController) {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.Top
     ) {
-        Text("Daily Check-In", style = MaterialTheme.typography.headlineSmall)
-        Spacer(modifier = Modifier.height(16.dp))
+        // Back button + title row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { navController.popBackStack() }) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back"
+                )
+            }
+            Text(
+                text = "Daily Check-In",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
 
-        CheckInQuestion("Have you done your relaxation exercises today?",
+        Spacer(modifier = Modifier.height(8.dp))
+
+        CheckInQuestion(
+            title = "Have you done your relaxation exercises today?",
             options = listOf("Yes", "No"),
             selected = uiState.relaxationDone,
-            onSelect = { uiState = uiState.copy(relaxationDone = it) })
+            onSelect = { uiState = uiState.copy(relaxationDone = it) }
+        )
 
-        CheckInQuestion("How long did you practice the exercises today?",
+        CheckInQuestion(
+            title = "How long did you practice the exercises today?",
             options = listOf("<5 min", "5-10 min", "10-20 min", ">20 min"),
             selected = uiState.relaxationDuration,
-            onSelect = { uiState = uiState.copy(relaxationDuration = it) })
+            onSelect = { uiState = uiState.copy(relaxationDuration = it) }
+        )
 
-        CheckInQuestion("Did you use sound therapy today?",
+        CheckInQuestion(
+            title = "Did you use sound therapy today?",
             options = listOf("Yes", "No"),
             selected = uiState.soundTherapyDone,
-            onSelect = { uiState = uiState.copy(soundTherapyDone = it) })
+            onSelect = { uiState = uiState.copy(soundTherapyDone = it) }
+        )
 
-        CheckInQuestion("What was the duration of sound therapy?",
+        CheckInQuestion(
+            title = "What was the duration of sound therapy?",
             options = listOf("<10 min", "10-30 min", "30-60 min", ">1 hour"),
             selected = uiState.soundTherapyDuration,
-            onSelect = { uiState = uiState.copy(soundTherapyDuration = it) })
+            onSelect = { uiState = uiState.copy(soundTherapyDuration = it) }
+        )
 
-        LevelSlider("How is your tinnitus today? (1–10)",
-            uiState.tinnitusLevel) { uiState = uiState.copy(tinnitusLevel = it) }
+        LevelSlider(
+            title = "How is your tinnitus today?",
+            value = uiState.tinnitusLevel,
+            onChange = { uiState = uiState.copy(tinnitusLevel = it) }
+        )
 
-        LevelSlider("How anxious do you feel today? (1–10)",
-            uiState.anxietyLevel) { uiState = uiState.copy(anxietyLevel = it) }
+        LevelSlider(
+            title = "How anxious do you feel today?",
+            value = uiState.anxietyLevel,
+            onChange = { uiState = uiState.copy(anxietyLevel = it) }
+        )
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -158,27 +201,65 @@ fun CheckInScreen(navController: NavController) {
 
 @Composable
 fun CheckInQuestion(title: String, options: List<String>, selected: String, onSelect: (String) -> Unit) {
-    Spacer(modifier = Modifier.height(16.dp))
-    Text(title)
-    RadioRow(options = options, selected = selected, onSelect = onSelect)
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            RadioGrid(options = options, selected = selected, onSelect = onSelect)
+        }
+    }
 }
 
 @Composable
 fun LevelSlider(title: String, value: Int, onChange: (Int) -> Unit) {
-    Spacer(modifier = Modifier.height(16.dp))
-    Text(title)
-    Slider(
-        value = value.toFloat(),
-        onValueChange = { onChange(it.toInt()) },
-        valueRange = 1f..10f,
-        steps = 8
-    )
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Text("1 (Lowest)", style = MaterialTheme.typography.bodySmall)
-        Text("10 (Highest)", style = MaterialTheme.typography.bodySmall)
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = value.toString(),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Slider(
+                value = value.toFloat(),
+                onValueChange = { onChange(it.toInt()) },
+                valueRange = 1f..10f,
+                steps = 8
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("1 – Lowest", style = MaterialTheme.typography.bodySmall)
+                Text("10 – Highest", style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
 
@@ -194,23 +275,52 @@ fun RecommendationDialog(message: String, onDismiss: () -> Unit, onUpdate: () ->
 }
 
 @Composable
-fun RadioRow(
+fun RadioGrid(
     options: List<String>,
     selected: String,
     onSelect: (String) -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly
-    ) {
-        options.forEach { option ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                RadioButton(
-                    selected = selected == option,
-                    onClick = { onSelect(option) }
-                )
-                Text(option)
+    if (options.size <= 2) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            options.forEach { option ->
+                RadioOption(option, selected, onSelect)
             }
         }
+    } else {
+        // 2-column grid for 4 options
+        val rows = options.chunked(2)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            rows.forEach { rowOptions ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    rowOptions.forEach { option ->
+                        RadioOption(option, selected, onSelect)
+                    }
+                    // Pad empty space if odd number in last row
+                    if (rowOptions.size < 2) {
+                        Spacer(modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RadioOption(option: String, selected: String, onSelect: (String) -> Unit) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(horizontal = 4.dp)
+    ) {
+        RadioButton(
+            selected = selected == option,
+            onClick = { onSelect(option) }
+        )
+        Text(option, style = MaterialTheme.typography.bodySmall)
     }
 }
