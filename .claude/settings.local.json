@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C /c/Users/92332/AndroidStudioProjects/TinnitusAIISH branch -a)",
+      "Bash(git -C /c/Users/92332/AndroidStudioProjects/TinnitusAIISH branch -D claude/competent-villani claude/ecstatic-keller claude/trusting-morse claude/wizardly-chatterjee)",
+      "Bash(git -C /c/Users/92332/AndroidStudioProjects/TinnitusAIISH worktree list)",
+      "Bash(git -C /c/Users/92332/AndroidStudioProjects/TinnitusAIISH worktree prune)",
+      "Bash(git -C /c/Users/92332/AndroidStudioProjects/TinnitusAIISH checkout -b claude/dev)"
+    ]
+  }
+}

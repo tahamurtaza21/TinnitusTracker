@@ -7,14 +7,14 @@ plugins {
 
 android {
     namespace = "com.aiish.tinnitus"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.aiish.tinnitus"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 2
-        versionName = "1.1"
+        targetSdk = 36
+        versionCode = 5
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -42,10 +42,6 @@ android {
         compose = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.10" // ✅ must match Compose 1.8.3
-    }
-
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -54,40 +50,40 @@ android {
 }
 
 dependencies {
-    // ✅ Core Android
+    // Core Android
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx.v281)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom.v20240300))
-    implementation(libs.androidx.compiler)
 
-
-    // ✅ Compose UI
+    // Compose UI
     implementation(libs.ui)
     implementation(libs.material3)
     implementation(libs.ui.tooling.preview)
     implementation(libs.androidx.navigation.compose.v277)
-    implementation(libs.kotlin.stdlib)
     implementation(libs.androidx.work.runtime.ktx.v290)
 
-    // ✅ Firebase
+    // Firebase
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth.ktx)
     implementation(libs.google.firebase.firestore.ktx)
-
-    // ✅ Charting
-    implementation(libs.mpandroidchart)
-
-    // ✅ PDF Generator
-    implementation(libs.itext7.core.v725)
-
-    // ✅ Kotlin Coroutines
-    implementation(libs.kotlinx.coroutines.android)
     implementation(libs.google.firebase.functions.ktx)
-    implementation(libs.androidx.room.common.jvm)
     implementation(libs.google.firebase.storage.ktx)
 
-    // ✅ Testing
+    // Charting
+    implementation(libs.mpandroidchart)
+
+    // PDF Generator
+    implementation(libs.itext7.core.v725)
+
+    // Room
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+
+    // Kotlin Coroutines
+    implementation(libs.kotlinx.coroutines.android)
+
+    // Testing
     testImplementation(libs.junit)
     testImplementation(libs.testng)
     androidTestImplementation(libs.androidx.junit)
@@ -95,5 +91,4 @@ dependencies {
     androidTestImplementation(libs.ui.test.junit4)
     debugImplementation(libs.ui.tooling)
     debugImplementation(libs.ui.test.manifest)
-
 }
